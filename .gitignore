@@ -1,8 +1,4 @@
-__pycache__/
-*.pyc
-dist/
-candidate/
+.release/
+.tooling/
 candidate.json
 test-results.txt
-.venv/
-.test-deps/

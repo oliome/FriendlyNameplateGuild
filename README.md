@@ -13,7 +13,7 @@ A lightweight **World of Warcraft: Forever** addon that displays guild names ben
 
 ## Installation
 
-1. [Download the addon](downloads/FriendlyNameplateGuild.zip?raw=true).
+1. [Download the addon ZIP from GitHub Releases](https://github.com/oliome/FriendlyNameplateGuild/releases).
 2. Extract the `FriendlyNameplateGuild` folder into `_forever_/Interface/AddOns`.
 3. Restart WoW and enable **FriendlyNameplateGuild** in the AddOns menu.
 4. Enable **friendly player nameplates** in the game's settings. Open `/fng` and enable **Show names only** for the recommended layout without friendly health bars.

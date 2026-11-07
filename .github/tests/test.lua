@@ -1,0 +1,257 @@
+-- Execute the real addon in a fresh mocked WoW environment for every case.
+local env, passed, failed
+passed, failed = 0, 0
+local function run(code)
+    local chunk = assert(loadstring(code))
+    setfenv(chunk, env)
+    return chunk()
+end
+local function eval(code) return run("return " .. code) end
+local function eq(actual, expected)
+    assert(actual == expected, "expected " .. tostring(expected) .. ", got " .. tostring(actual))
+end
+local function near(actual, expected) assert(math.abs(actual - expected) < 0.000001) end
+local function contains(value, expected) assert(value:find(expected, 1, true), expected) end
+local function start(setup)
+    run(setup or "visible = {MakePlate('nameplate1', 'Azeroth Explorers')}")
+    run("driver.scripts.OnEvent(driver, 'ADDON_LOADED', 'FriendlyNameplateGuild')")
+end
+local function test(name, body)
+    env = setmetatable({}, {__index = _G})
+    env._G = env
+    local mocks = assert(loadfile(".github/tests/mocks.lua"))
+    setfenv(mocks, env)
+    mocks()
+    for _, file in ipairs({"FriendlyNameplateGuild.lua", "Options.lua"}) do
+        local chunk = assert(loadfile(file))
+        setfenv(chunk, env)
+        chunk("FriendlyNameplateGuild", env.namespace)
+    end
+    local ok, message = pcall(body)
+    if ok then passed = passed + 1
+    else failed = failed + 1; io.stderr:write("FAIL " .. name .. ": " .. tostring(message) .. "\n") end
+end
+
+test([=[test_friendly_player_guild_appears_below_existing_name]=], function()
+    start()
+    eq(eval([=[labels[1].text]=]), [=[<Azeroth Explorers>]=])
+    eq(eval([=[labels[1].shown]=]), true)
+    eq(eval([=[labels[1].anchor[1]]=]), [=[TOP]=])
+    eq(eval([=[labels[1].anchor[3]]=]), [=[BOTTOM]=])
+    eq(eval([=[labels[1].anchor[5]]=]), -2)
+    eq(eval([=[labels[1].anchor[2] == visible[1].UnitFrame.name]=]), true)
+    eq(eval([=[labels[1].font]=]), [=[MockLocaleFontFamily]=])
+end)
+
+test([=[test_unguilded_hostile_and_npc_have_no_label]=], function()
+    start([=[visible = {MakePlate('a', nil), MakePlate('b', 'Hostile Guild', false), MakePlate('c', 'NPC Guild', true, false)}]=])
+    eq(eval([=[#labels]=]), 0)
+end)
+
+test([=[test_newly_cached_guild_is_retried_without_roster_scan]=], function()
+    start([=[visible = {MakePlate('nameplate1', nil)}]=])
+    run([=[guilds.nameplate1 = 'Loaded Later'; timer.callback()]=])
+    eq(eval([=[labels[1].text]=]), [=[<Loaded Later>]=])
+end)
+
+test([=[test_guild_change_and_departure_clear_stale_text]=], function()
+    start()
+    run([=[guilds.nameplate1 = 'New Guild'; namespace.Refresh()]=])
+    eq(eval([=[labels[1].text]=]), [=[<New Guild>]=])
+    run([=[guilds.nameplate1 = nil; namespace.Refresh()]=])
+    eq(eval([=[labels[1].shown]=]), false)
+end)
+
+test([=[test_pooled_frame_reuse_does_not_keep_previous_guild]=], function()
+    start()
+    run([=[driver.scripts.OnEvent(driver, 'NAME_PLATE_UNIT_REMOVED', 'nameplate1')]=])
+    eq(eval([=[labels[1].shown]=]), false)
+    run([=[guilds.nameplate2 = 'Other Guild'; players.nameplate2 = true; friends.nameplate2 = true; visible[1].unit = 'nameplate2'; namespace.Refresh()]=])
+    eq(eval([=[#labels]=]), 1)
+    eq(eval([=[labels[1].text]=]), [=[<Other Guild>]=])
+end)
+
+test([=[test_combat_and_instances_hide_and_restore_owned_labels]=], function()
+    start()
+    for _, flag in ipairs({[=[combat]=], [=[instance]=]}) do
+        run(flag .. [=[ = true; namespace.Refresh()]=])
+        eq(eval([=[labels[1].shown]=]), false)
+        run(flag .. [=[ = false; namespace.Refresh()]=])
+        eq(eval([=[labels[1].shown]=]), true)
+    end
+end)
+
+test([=[test_hidden_name_and_removed_plate_hide_guild_line]=], function()
+    start()
+    run([=[visible[1].UnitFrame.name.shown = false; namespace.Refresh()]=])
+    eq(eval([=[labels[1].shown]=]), false)
+    run([=[visible[1].UnitFrame.name.shown = true; namespace.Refresh(); visible = {}; namespace.Refresh()]=])
+    eq(eval([=[labels[1].shown]=]), false)
+end)
+
+test([=[test_forbidden_plate_is_not_read]=], function()
+    start([=[visible = {setmetatable({IsForbidden = function() return true end}, {__index = function() error('forbidden frame read') end})}]=])
+    eq(eval([=[#labels]=]), 0)
+end)
+
+test([=[test_restricted_guild_value_is_not_used]=], function()
+    run([=[secret = setmetatable({}, {__tostring = function() error('secret used') end}); issecretvalue = function(v) return rawequal(v, secret) end]=])
+    start([=[visible = {MakePlate('nameplate1', secret)}]=])
+    eq(eval([=[#labels]=]), 0)
+end)
+
+test([=[test_erroring_plate_does_not_block_other_players]=], function()
+    start([=[visible = {setmetatable({}, {__index = function() error('replaced plate') end}), MakePlate('a', 'Readable')}]=])
+    eq(eval([=[labels[1].text]=]), [=[<Readable>]=])
+end)
+
+test([=[test_missing_required_api_hides_existing_labels]=], function()
+    start()
+    run([=[GetGuildInfo = nil; namespace.Refresh()]=])
+    eq(eval([=[labels[1].shown]=]), false)
+    run([=[namespace.Command('status')]=])
+    contains(eval([=[messages[#messages - 1]]=]), [=[API unavailable]=])
+end)
+
+test([=[test_commands_change_only_owned_labels]=], function()
+    start()
+    run([=[namespace.Command('size 16'); namespace.Command('gap 5'); namespace.Command('color ff8000')]=])
+    eq(eval([=[labels[1].size]=]), 16)
+    eq(eval([=[labels[1].anchor[5]]=]), -5)
+    eq(eval([=[labels[1].color[1]]=]), 1)
+    near(eval([=[labels[1].color[2]]=]), (128 / 255))
+    run([=[namespace.Command('off')]=])
+    eq(eval([=[labels[1].shown]=]), false)
+    run([=[namespace.Command('on')]=])
+    eq(eval([=[labels[1].shown]=]), true)
+end)
+
+test([=[test_invalid_settings_commands_and_reset]=], function()
+    run([=[FriendlyNameplateGuildDB = {enabled = 'yes', fontSize = 100, gap = -5, color = 'oops'}]=])
+    start()
+    eq(eval([=[FriendlyNameplateGuildDB.fontSize]=]), 11)
+    run([=[namespace.Command('size nan'); namespace.Command('size 25'); namespace.Command('gap -1'); namespace.Command('color invalid')]=])
+    eq(eval([=[FriendlyNameplateGuildDB.fontSize]=]), 11)
+    eq(eval([=[FriendlyNameplateGuildDB.gap]=]), 2)
+    eq(eval([=[FriendlyNameplateGuildDB.color]=]), [=[66ff99]=])
+    run([=[namespace.Command('off'); namespace.Command('size 15'); namespace.Command('reset')]=])
+    eq(eval([=[FriendlyNameplateGuildDB.enabled]=]), true)
+    eq(eval([=[FriendlyNameplateGuildDB.fontSize]=]), 11)
+end)
+
+test([=[test_saved_settings_are_preserved_and_unrelated_addon_load_ignored]=], function()
+    run([=[FriendlyNameplateGuildDB = {enabled = false, fontSize = 14, gap = 4, color = 'aabbcc'}; driver.scripts.OnEvent(driver, 'ADDON_LOADED', 'OtherAddon')]=])
+    eq(eval([=[#labels]=]), 0)
+    start()
+    eq(eval([=[FriendlyNameplateGuildDB.fontSize]=]), 14)
+    eq(eval([=[FriendlyNameplateGuildDB.enabled]=]), false)
+    eq(eval([=[#labels]=]), 0)
+end)
+
+test([=[test_guild_text_cannot_inject_wow_color_markup]=], function()
+    start([=[visible = {MakePlate('a', '|cffff0000Guild')}]=])
+    eq(eval([=[labels[1].text]=]), [=[<||cffff0000Guild>]=])
+end)
+
+test([=[test_settings_ui_is_lazy_and_controls_update_real_settings]=], function()
+    start()
+    eq(eval([=[namespace.SettingsWindow]=]), nil)
+    run([=[namespace.Command('')]=])
+    eq(eval([=[namespace.SettingsWindow.shown]=]), true)
+    run([=[namespace.SettingsWindow.size:SetValue(15); namespace.SettingsWindow.gap:SetValue(4)]=])
+    eq(eval([=[FriendlyNameplateGuildDB.fontSize]=]), 15)
+    eq(eval([=[labels[1].size]=]), 15)
+    eq(eval([=[labels[1].anchor[5]]=]), -4)
+    run([=[namespace.SettingsWindow.enabled:SetChecked(false); namespace.SettingsWindow.enabled.scripts.OnClick(namespace.SettingsWindow.enabled)]=])
+    eq(eval([=[labels[1].shown]=]), false)
+    run([=[namespace.SettingsWindow.reset.scripts.OnClick()]=])
+    eq(eval([=[namespace.SettingsWindow.size.value]=]), 11)
+    eq(eval([=[labels[1].shown]=]), true)
+    run([=[namespace.Command('')]=])
+    eq(eval([=[#UISpecialFrames]=]), 1)
+end)
+
+test([=[test_color_picker_applies_and_cancel_restores_the_original]=], function()
+    start()
+    run([=[
+            ColorPickerFrame = {
+                SetupColorPickerAndShow = function(self, info) self.info = info end,
+                GetColorRGB = function() return 1, 0, 0 end,
+            }
+            namespace.ShowSettings()
+            namespace.SettingsWindow.color.scripts.OnClick()
+            ColorPickerFrame.info.swatchFunc()
+        ]=])
+    eq(eval([=[FriendlyNameplateGuildDB.color]=]), [=[ff0000]=])
+    eq(eval([=[namespace.SettingsWindow.preview.color[1]]=]), 1)
+    run([=[ColorPickerFrame.info.cancelFunc()]=])
+    eq(eval([=[FriendlyNameplateGuildDB.color]=]), [=[66ff99]=])
+end)
+
+test([=[test_runtime_interface_warning_uses_metadata_not_build_number]=], function()
+    run([=[
+            C_AddOns = {GetAddOnMetadata = function() return '16001' end}
+            GetBuildInfo = function() return '1.60.2', '99999', 'date', 16002 end
+        ]=])
+    start()
+    contains(eval([=[messages[1]]=]), [=[New WoW Interface 16002]=])
+    run([=[GetBuildInfo = function() return '1.60.1', '99999', 'date', 16001 end]=])
+    eq(eval([=[(namespace.Compatibility())]=]), false)
+end)
+
+test([=[test_polling_has_no_per_frame_handler_and_stops_when_not_needed]=], function()
+    start()
+    eq(eval([=[driver.scripts.OnUpdate]=]), nil)
+    run([=[originalTimer = timer; namespace.Refresh()]=])
+    eq(eval([=[timer == originalTimer]=]), true)
+    eq(eval([=[timer.cancelled]=]), false)
+    run([=[namespace.Command('off')]=])
+    eq(eval([=[timer.cancelled]=]), true)
+    run([=[namespace.Command('on')]=])
+    eq(eval([=[timer.cancelled]=]), false)
+    run([=[visible = {}; namespace.Refresh()]=])
+    eq(eval([=[timer.cancelled]=]), true)
+end)
+
+test([=[test_name_only_setting_changes_only_on_explicit_ui_click]=], function()
+    run([=[
+            nameOnlyValue = '0'; cvarWrites = 0
+            C_CVar.GetCVar = function(key) assert(key == 'nameplateShowOnlyNameForFriendlyPlayerUnits'); return nameOnlyValue end
+            C_CVar.SetCVar = function(key, value) assert(key == 'nameplateShowOnlyNameForFriendlyPlayerUnits'); nameOnlyValue = value; cvarWrites = cvarWrites + 1 end
+        ]=])
+    start()
+    run([=[namespace.ShowSettings()]=])
+    eq(eval([=[cvarWrites]=]), 0)
+    eq(eval([=[namespace.SettingsWindow.nameOnly.checked]=]), false)
+    run([=[namespace.SettingsWindow.nameOnly:SetChecked(true); namespace.SettingsWindow.nameOnly.scripts.OnClick(namespace.SettingsWindow.nameOnly)]=])
+    eq(eval([=[nameOnlyValue]=]), [=[1]=])
+    run([=[namespace.Command('off'); namespace.Reset()]=])
+    eq(eval([=[cvarWrites]=]), 1)
+    eq(eval([=[nameOnlyValue]=]), [=[1]=])
+end)
+
+test([=[test_name_only_setting_respects_combat_and_syncs_external_changes]=], function()
+    run([=[nameOnlyValue = '0'; C_CVar.GetCVar = function() return nameOnlyValue end; C_CVar.SetCVar = function() error('must not write during combat') end]=])
+    start()
+    run([=[namespace.ShowSettings(); combat = true; namespace.SettingsWindow.nameOnly:SetChecked(true); namespace.SettingsWindow.nameOnly.scripts.OnClick(namespace.SettingsWindow.nameOnly)]=])
+    eq(eval([=[namespace.SettingsWindow.nameOnly.checked]=]), false)
+    contains(eval([=[messages[#messages]]=]), [=[outside combat]=])
+    run([=[nameOnlyValue = '1'; driver.scripts.OnEvent(driver, 'CVAR_UPDATE', 'nameplateShowOnlyNameForFriendlyPlayerUnits')]=])
+    eq(eval([=[namespace.SettingsWindow.nameOnly.checked]=]), true)
+end)
+
+test([=[test_unavailable_name_only_option_is_disabled]=], function()
+    start()
+    run([=[namespace.ShowSettings()]=])
+    eq(eval([=[namespace.SettingsWindow.nameOnly.enabled]=]), false)
+end)
+
+test([=[test_name_only_setting_reports_rejected_game_changes]=], function()
+    run([=[C_CVar.GetCVar = function() return '0' end; C_CVar.SetCVar = function() return false end]=])
+    start()
+    eq(eval([=[namespace.SetNameOnly(true)]=]), false)
+    contains(eval([=[messages[#messages]]=]), [=[could not change]=])
+end)
+
+print(passed .. " addon tests passed; " .. failed .. " failed")
+if failed > 0 then os.exit(1) end

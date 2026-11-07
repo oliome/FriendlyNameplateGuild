@@ -1,0 +1,39 @@
+name: Build
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: write
+  issues: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check the addon
+        uses: ./.github/actions/check
+      - name: Package and release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: BigWigsMods/packager@v2
+        with:
+          args: '-g forever'
+          pandoc: 'false'
+        env:
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+      - name: Save failed test output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-checks
+          path: test-results.txt
+          if-no-files-found: ignore
+      - name: Open an issue for failed checks
+        if: failure() && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: FNG_BUILD=$(jq -r '.build' .github/wow-version.json) bash .github/report-failure.sh

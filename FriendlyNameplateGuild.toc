@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: FriendlyNameplateGuild
 ## Notes: Adds guild names below friendly player nameplates. Experimental open-world build.
-## Version: 0.4.1
+## Version: @project-version@
 ## SavedVariables: FriendlyNameplateGuildDB
-GuildNames.lua
-Settings.lua
+FriendlyNameplateGuild.lua
+Options.lua

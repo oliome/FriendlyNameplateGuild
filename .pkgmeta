@@ -1,0 +1,11 @@
+package-as: FriendlyNameplateGuild
+
+ignore:
+  - .github
+  - .gitignore
+  - .gitattributes
+  - .luacheckrc
+  - README.md
+  - .tooling
+  - candidate.json
+  - test-results.txt
