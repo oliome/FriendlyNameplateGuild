@@ -3,6 +3,6 @@
   "channel": "live",
   "interface": 16001,
   "build": 70862,
-  "addon_version": "0.2.0",
+  "addon_version": "0.3.0",
   "runtime_ready": false
 }

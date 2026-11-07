@@ -9,6 +9,13 @@ messages = {}
 combat = false
 instance = false
 namespace = {}
+UIParent = {}
+UISpecialFrames = {}
+C_Timer = {NewTicker = function(interval, callback)
+    timer = {callback = callback, interval = interval, cancelled = false}
+    function timer:Cancel() self.cancelled = true end
+    return timer
+end}
 
 function print(message) messages[#messages + 1] = message end
 function InCombatLockdown() return combat end
@@ -56,9 +63,38 @@ function MakePlate(unit, guild, friendly, isPlayer)
     return plate
 end
 
-function CreateFrame()
-    driver = {scripts = {}, events = {}}
-    function driver:SetScript(event, callback) self.scripts[event] = callback end
-    function driver:RegisterEvent(event) self.events[event] = true end
-    return driver
+local function Widget()
+    local widget = {scripts = {}, events = {}}
+    function widget:SetScript(event, callback) self.scripts[event] = callback end
+    function widget:RegisterEvent(event) self.events[event] = true end
+    function widget:SetPoint(...) self.anchor = {...} end
+    function widget:ClearAllPoints() self.anchor = nil end
+    function widget:SetText(value) self.text = value end
+    function widget:SetSize(w, h) self.width = w; self.height = h end
+    function widget:SetWidth(w) self.width = w end
+    function widget:SetHeight(h) self.height = h end
+    function widget:SetJustifyH(value) self.justify = value end
+    function widget:SetFrameStrata(value) self.strata = value end
+    function widget:SetMinMaxValues(low, high) self.low = low; self.high = high end
+    function widget:SetValueStep(step) self.step = step end
+    function widget:SetObeyStepOnDrag() end
+    function widget:SetChecked(value) self.checked = value end
+    function widget:GetChecked() return self.checked end
+    function widget:SetFontObject(value) self.font = value end
+    function widget:SetFontHeight(value) self.size = value end
+    function widget:SetTextColor(...) self.color = {...} end
+    function widget:SetValue(value)
+        self.value = value
+        if self.scripts.OnValueChanged then self.scripts.OnValueChanged(self, value) end
+    end
+    function widget:Show() self.shown = true end
+    function widget:Hide() self.shown = false end
+    function widget:CreateFontString() return Widget() end
+    return widget
+end
+function CreateFrame(kind, name)
+    local widget = Widget()
+    if kind == 'Frame' and name == nil then driver = widget end
+    if name == 'BetterForeverNamesSettings' then widget.TitleText = Widget() end
+    return widget
 end

@@ -12,6 +12,8 @@ class GuildNamesTests(unittest.TestCase):
         self.lua.execute((ROOT / 'tests/lua/nameplates.lua').read_text(encoding='utf-8'))
         source = (ROOT / 'addon/BetterForeverNames/GuildNames.lua').read_text(encoding='utf-8')
         self.lua.execute('assert(loadstring(...))("BetterForeverNames", namespace)', source)
+        settings = (ROOT / 'addon/BetterForeverNames/Settings.lua').read_text(encoding='utf-8')
+        self.lua.execute('assert(loadstring(...))("BetterForeverNames", namespace)', settings)
 
     def run_lua(self, code):
         self.lua.execute(code)
@@ -39,7 +41,7 @@ class GuildNamesTests(unittest.TestCase):
 
     def test_newly_cached_guild_is_retried_without_roster_scan(self):
         self.start("visible = {MakePlate('nameplate1', nil)}")
-        self.run_lua("guilds.nameplate1 = 'Loaded Later'; driver.scripts.OnUpdate(driver, 1)")
+        self.run_lua("guilds.nameplate1 = 'Loaded Later'; timer.callback()")
         self.assertEqual(self.value('labels[1].text'), '<Loaded Later>')
 
     def test_guild_change_and_departure_clear_stale_text(self):
@@ -127,6 +129,62 @@ class GuildNamesTests(unittest.TestCase):
     def test_guild_text_cannot_inject_wow_color_markup(self):
         self.start("visible = {MakePlate('a', '|cffff0000Guild')}")
         self.assertEqual(self.value('labels[1].text'), '<||cffff0000Guild>')
+
+    def test_settings_ui_is_lazy_and_controls_update_real_settings(self):
+        self.start()
+        self.assertIsNone(self.value('namespace.SettingsWindow'))
+        self.run_lua("namespace.Command('')")
+        self.assertTrue(self.value('namespace.SettingsWindow.shown'))
+        self.run_lua('namespace.SettingsWindow.size:SetValue(15); namespace.SettingsWindow.gap:SetValue(4)')
+        self.assertEqual(self.value('BetterForeverNamesDB.fontSize'), 15)
+        self.assertEqual(self.value('labels[1].size'), 15)
+        self.assertEqual(self.value('labels[1].anchor[5]'), -4)
+        self.run_lua('namespace.SettingsWindow.enabled:SetChecked(false); namespace.SettingsWindow.enabled.scripts.OnClick(namespace.SettingsWindow.enabled)')
+        self.assertFalse(self.value('labels[1].shown'))
+        self.run_lua('namespace.SettingsWindow.reset.scripts.OnClick()')
+        self.assertEqual(self.value('namespace.SettingsWindow.size.value'), 11)
+        self.assertTrue(self.value('labels[1].shown'))
+        self.run_lua("namespace.Command('')")
+        self.assertEqual(self.value('#UISpecialFrames'), 1)
+
+    def test_color_picker_applies_and_cancel_restores_the_original(self):
+        self.start()
+        self.run_lua('''
+            ColorPickerFrame = {
+                SetupColorPickerAndShow = function(self, info) self.info = info end,
+                GetColorRGB = function() return 1, 0, 0 end,
+            }
+            namespace.ShowSettings()
+            namespace.SettingsWindow.color.scripts.OnClick()
+            ColorPickerFrame.info.swatchFunc()
+        ''')
+        self.assertEqual(self.value('BetterForeverNamesDB.color'), 'ff0000')
+        self.assertEqual(self.value('namespace.SettingsWindow.preview.color[1]'), 1)
+        self.run_lua('ColorPickerFrame.info.cancelFunc()')
+        self.assertEqual(self.value('BetterForeverNamesDB.color'), '66ff99')
+
+    def test_runtime_interface_warning_uses_metadata_not_build_number(self):
+        self.run_lua('''
+            C_AddOns = {GetAddOnMetadata = function() return '16001' end}
+            GetBuildInfo = function() return '1.60.2', '99999', 'date', 16002 end
+        ''')
+        self.start()
+        self.assertIn('New WoW Interface 16002', self.value('messages[1]'))
+        self.run_lua("GetBuildInfo = function() return '1.60.1', '99999', 'date', 16001 end")
+        self.assertFalse(self.value('(namespace.Compatibility())'))
+
+    def test_polling_has_no_per_frame_handler_and_stops_when_not_needed(self):
+        self.start()
+        self.assertIsNone(self.value('driver.scripts.OnUpdate'))
+        self.run_lua('originalTimer = timer; namespace.Refresh()')
+        self.assertTrue(self.value('timer == originalTimer'))
+        self.assertFalse(self.value('timer.cancelled'))
+        self.run_lua("namespace.Command('off')")
+        self.assertTrue(self.value('timer.cancelled'))
+        self.run_lua("namespace.Command('on')")
+        self.assertFalse(self.value('timer.cancelled'))
+        self.run_lua('visible = {}; namespace.Refresh()')
+        self.assertTrue(self.value('timer.cancelled'))
 
 
 if __name__ == '__main__':

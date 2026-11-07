@@ -5,10 +5,18 @@ import tempfile
 import unittest
 from zipfile import ZipFile
 
-from tools.compatibility import ROOT, TOC, package, propose, stage
+from tools.compatibility import ROOT, TOC, package, propose, stage, newer_build
 
 
 class CompatibilityTests(unittest.TestCase):
+    def test_build_watcher_does_not_infer_interface_or_accept_other_products(self):
+        self.assertEqual(newer_build('1.60.1.70862\n', 70862), '')
+        self.assertEqual(newer_build('1.60.1.70863', 70862), '1.60.1.70863')
+        self.assertEqual(newer_build('1.60.1.70000', 70862), '')
+        for value in ('12.1.5.90000', '1.60.2', '<html>', '1.60.1.90000; echo unsafe'):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                newer_build(value, 70862)
+
     def setUp(self):
         self.state = dict(product='wowf', channel='live', interface=16001,
                           build=70862, addon_version='0.1.0', runtime_ready=False)

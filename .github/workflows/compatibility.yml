@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  issues: write
 concurrency:
   group: forever-compatibility
   cancel-in-progress: false
@@ -25,14 +26,26 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt
       - name: Validate baseline
         run: python -m unittest discover -s tests -v
+      - name: Watch Forever builds when no verified Interface feed is configured
+        if: vars.FOREVER_BUILD_FEED_URL == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BUILD=$(python tools/compatibility.py --watch)
+          if [ -n "$BUILD" ]; then
+            TITLE="Forever $BUILD needs compatibility verification"
+            if ! gh issue list --state all --search "$TITLE in:title" --json title --jq '.[].title' | grep -Fxq "$TITLE"; then
+              gh issue create --title "$TITLE" --body 'The Forever UI mirror reports a newer build. Verify the live Interface with GetBuildInfo(), test the addon, and update compatibility.json/TOC using the compatibility tool. A build change alone does not prove the addon is out of date. No version was automatically changed.'
+            fi
+            echo "$TITLE" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No newer Forever build observed in the UI mirror.' >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Stage observation
+        if: vars.FOREVER_BUILD_FEED_URL != ''
         env:
           FEED_URL: ${{ vars.FOREVER_BUILD_FEED_URL }}
         run: |
-          if [ -z "$FEED_URL" ]; then
-            echo 'Configure FOREVER_BUILD_FEED_URL using docs/AUTOMATION.md; no update was attempted.' >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
           python tools/compatibility.py --feed "$FEED_URL"
       - name: Test candidate
         run: python -m unittest discover -s tests -v

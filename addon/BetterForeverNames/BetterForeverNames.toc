@@ -1,6 +1,7 @@
 ## Interface: 16001
 ## Title: BetterForeverNames
 ## Notes: Adds guild names below friendly player nameplates. Experimental open-world build.
-## Version: 0.2.0
+## Version: 0.3.0
 ## SavedVariables: BetterForeverNamesDB
 GuildNames.lua
+Settings.lua

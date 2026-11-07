@@ -1,36 +1,30 @@
 # BetterForeverNames
 
-Adds a configurable **guild name beneath friendly player nameplates** in World of Warcraft: Forever.
+A small World of Warcraft: Forever addon that shows guild names beneath friendly player nameplates. Open **`/bfn`** for its settings window: enable/disable, font size, spacing, color picker, preview, and Reset. Changes apply immediately and are saved.
 
-**Status: experimental 0.2.0 preview.** The Lua implementation passes mocked tests, but has not yet been tested in the actual client. The owner approved using nameplates for guild labels after investigating the limitations of native overhead text. Automatic production releases remain disabled pending in-game validation.
+## Install
 
-## Download and install
+[Download 0.3.0 preview](downloads/BetterForeverNames-0.3.0-preview.zip?raw=true). Extract `BetterForeverNames` into `_forever_/Interface/AddOns`, restart WoW, and enable the addon. Enable friendly **player** nameplates in the game's own settings. You can use name-only mode to hide health bars.
 
-[Download BetterForeverNames 0.2.0 preview](downloads/BetterForeverNames-0.2.0-preview.zip?raw=true).
+Guilded friendly players get a separate guild line. Existing player names/colors are left alone. Labels pause in combat and instances, and restricted/replaced plates are skipped. Version 0.3.0 is awaiting live-client testing; automated tests use mocked WoW APIs. If a label is missing, run `/bfn status` and check for Lua errors.
 
-1. Extract the `BetterForeverNames` folder into Forever's `_forever_/Interface/AddOns` folder. The TOC and `GuildNames.lua` must sit directly inside that folder.
-2. Restart the client and enable **BetterForeverNames** in the AddOns menu.
-3. Enable friendly **player** nameplates in the game settings. For names without health bars, select the game's name-only option. The addon does not change these settings itself.
-4. In the open world, out of combat, approach a friendly player who belongs to a guild. A green `<Guild Name>` line should appear beneath their existing name. Guild data may take a moment to load.
+## Lightweight runtime
 
-The probe addon is separate and can be disabled. This addon leaves the existing player-name text/color untouched. Unguilded players, hostile players, and NPCs receive no guild label. This first preview hides its labels during combat and in instances. Replaced/restricted nameplates are skipped; other nameplate addons are not yet validated.
+The installed addon contains only the TOC and two Lua files. No libraries, textures, probe, research files, network requests, or roster scans. Settings controls are created only when opened. A one-second timer checks visible nameplates and retries missing guild data; it stops while disabled, with no plates, or in unsupported contexts. There is no every-frame update handler.
 
-## Commands
+The repository also keeps addon tests and its small packaging/update tooling; none of those are included in the install ZIP. Older research and diagnostic artifacts have been removed from the current tree; they remain recoverable in Git history.
 
-| Command | Effect |
-| --- | --- |
-| `/bfn status` | Show current state and visible guild-label count |
-| `/bfn on` / `/bfn off` | Show/hide the added guild lines |
-| `/bfn size 12` | Font size, 8–24 |
-| `/bfn gap 3` | Space below the player's name, 0–20 |
-| `/bfn color 66ff99` | Guild text color as six hex digits |
-| `/bfn reset` | Restore defaults |
+## WoW update detection
 
-Settings are saved across sessions. Missing guild data is retried once per second using visible plates only; no roster scan is performed. Please test `/bfn off`, changes of target/visible players, `/reload`, and settings across a full restart. Report `/bfn status` and any Lua error if labels do not appear.
+- **In game:** the addon compares `GetBuildInfo()`'s Interface value with its TOC metadata. A higher client Interface produces a warning and appears in the settings window. WoW itself also marks old TOCs out of date; if it refuses to load the addon, the addon's warning cannot run. It cannot rewrite its own installed files.
+- **On GitHub:** the compatibility workflow polls the Forever UI source mirror's `version.txt` every six hours. A newer build opens one GitHub issue for verification; repeated observations of the same build do not create duplicates. This is a community mirror, can lag Blizzard, and is not a Blizzard webhook. Follow repository issues/Actions for results. A new build does not by itself mean the Interface changed.
+- **Automatic bump/release:** this still requires a trusted HTTPS JSON feed configured as the repository variable `FOREVER_BUILD_FEED_URL`. It must supply actual live-client metadata: `{"product":"wowf","channel":"live","interface":16002,"build":71000}` (illustrative values). We do not infer Interface from patch/build numbers. When a higher verified Interface arrives, the workflow stages a TOC/patch-version bump, runs tests, packages, and publishes only when `runtime_ready` in `compatibility.json` and the repository variable `AUTO_RELEASE` are both true. They remain off pending in-game validation. No feed has been provisioned yet, so unattended version bumps are **not currently active**.
+
+Scheduled jobs may be delayed or disabled by GitHub's inactivity policy. A passing mock suite cannot detect every WoW API/rendering change; API-breaking updates need a code fix and client test. A published GitHub release also needs an addon manager or manual download to reach players' installations.
 
 ## Development
 
-Run with Python 3.11+:
+Python 3.11+; Lupa is a test-only dependency and executes the real Lua under Lua 5.1.
 
 ```powershell
 python -m pip install -r requirements-dev.txt
@@ -38,8 +32,6 @@ python -m unittest discover -s tests -v
 python tools/compatibility.py --package --preview
 ```
 
-Lupa runs the actual addon and probe code under Lua 5.1 with mocked WoW APIs. It is a development dependency and is never shipped in the addon. Tests cover rendering eligibility, frame reuse, missing/secret data, combat/instance transitions, saved settings, commands, and compatibility packaging. They do not establish live-client support.
+`python tools/compatibility.py --watch` checks the build mirror without modifying versions. `--observation <json-file>` stages a verified local observation for testing. Preview packaging does not enable production releases. Keep `runtime_ready` false until live appearance, frame reuse, settings persistence, disable/restore, combat/instance transitions, and errors have been checked.
 
-See [the current plan](docs/PLAN.md), [validation record](docs/IN_GAME_VALIDATION.md), [Recent Allies investigation](docs/RECENT_ALLIES_TRACE.md), and [automatic updates](docs/AUTOMATION.md). The original [read-only probe](docs/PROBE.md) remains available for diagnostics.
-
-Origin: `https://github.com/oliome/BetterForeverNames.git`. A trusted live Interface feed and first in-game validation are still required before enabling automated production releases. Preview packaging does not enable them.
+Source references: [Forever build metadata API](https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/BuildDocumentation.lua), [UI build mirror](https://github.com/Gethe/wow-ui-source/blob/forever/version.txt), [GitHub scheduling](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).

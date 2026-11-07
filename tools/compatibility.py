@@ -9,6 +9,15 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 ROOT = Path(__file__).resolve().parents[1]
 TOC = Path('addon/BetterForeverNames/BetterForeverNames.toc')
+BUILD_URL = 'https://raw.githubusercontent.com/Gethe/wow-ui-source/forever/version.txt'
+
+
+def newer_build(version, current_build):
+    """A UI mirror can reveal a build change, but cannot supply an Interface."""
+    match = re.fullmatch(r'1\.60\.\d+\.(\d+)', version.strip())
+    if not match:
+        raise ValueError('Unrecognized Forever build; check the source manually')
+    return version.strip() if int(match[1]) > current_build else ''
 
 
 def validate_observation(value):
@@ -96,7 +105,16 @@ def main():
     parser.add_argument('--observation', type=Path, help='Local JSON observation for offline checks')
     parser.add_argument('--package', action='store_true')
     parser.add_argument('--preview', action='store_true', help='Explicitly package an unvalidated desktop test build')
+    parser.add_argument('--watch', action='store_true', help='Print a newer Forever mirror build, without inferring Interface or changing files')
     args = parser.parse_args()
+    if args.watch:
+        if args.package or args.preview or args.feed or args.observation:
+            parser.error('--watch cannot be combined with update/package options')
+        state = json.loads((ROOT / 'compatibility.json').read_text(encoding='utf-8'))
+        with urlopen(BUILD_URL, timeout=30) as response:
+            version = response.read(128).decode('ascii')
+        print(newer_build(version, state['build']))
+        return
     if args.package:
         print(package(ROOT, ROOT / 'dist', preview=args.preview))
         return

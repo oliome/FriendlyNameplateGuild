@@ -4,6 +4,14 @@ local widgets = setmetatable({}, {__mode = "k"})
 local defaults = {enabled = true, fontSize = 11, gap = 2, color = "66ff99"}
 local state = "waiting for login"
 local displayed = 0
+local ticker
+
+local function polling(wanted)
+    if not wanted and ticker then ticker:Cancel(); ticker = nil end
+    if wanted and not ticker and C_Timer and C_Timer.NewTicker then
+        ticker = C_Timer.NewTicker(1, function() Addon.Refresh() end)
+    end
+end
 
 local function accessible(value)
     if type(issecretvalue) == "function" and issecretvalue(value) then return false end
@@ -78,23 +86,23 @@ end
 function Addon.Refresh()
     hideAll()
     if not initialized then return end
-    if not BetterForeverNamesDB.enabled then state = "disabled"; return end
+    if not BetterForeverNamesDB.enabled then state = "disabled"; polling(false); return end
     if type(InCombatLockdown) ~= "function" or type(IsInInstance) ~= "function" then
-        state = "required context API unavailable"; return
+        state = "required context API unavailable"; polling(false); return
     end
     local combat = InCombatLockdown()
-    if not accessible(combat) or combat then state = "paused in combat"; return end
+    if not accessible(combat) or combat then state = "paused in combat"; polling(false); return end
     local instance = IsInInstance()
-    if not accessible(instance) or instance then state = "paused in instances"; return end
+    if not accessible(instance) or instance then state = "paused in instances"; polling(false); return end
     if not C_NamePlate or type(C_NamePlate.GetNamePlates) ~= "function"
         or type(GetGuildInfo) ~= "function" or type(UnitIsPlayer) ~= "function"
         or type(UnitIsFriend) ~= "function" or not SystemFont_NamePlate then
-        state = "required nameplate or guild API unavailable"; return
+        state = "required nameplate or guild API unavailable"; polling(false); return
     end
     local ok, plates = pcall(C_NamePlate.GetNamePlates)
     if not ok or not accessible(plates) or type(plates) ~= "table"
         or (type(issecrettable) == "function" and issecrettable(plates)) then
-        state = "nameplates unavailable"; return
+        state = "nameplates unavailable"; polling(false); return
     end
     state = "active"
     for _, plate in ipairs(plates) do
@@ -102,6 +110,37 @@ function Addon.Refresh()
         local drawn = pcall(draw, plate)
         if not drawn then state = "active; some nameplates unavailable" end
     end
+    polling(#plates > 0)
+end
+
+function Addon.Compatibility()
+    local metadata = C_AddOns and C_AddOns.GetAddOnMetadata
+    local supported = type(metadata) == "function" and tonumber(metadata(addonName, "Interface"))
+    if type(GetBuildInfo) ~= "function" or not supported then return false, "Compatibility unavailable" end
+    local _, _, _, current = GetBuildInfo()
+    if type(current) ~= "number" then return false, "Compatibility unavailable" end
+    if current > supported then
+        return true, "New WoW Interface " .. current .. "; addon supports " .. supported .. ". Check for an update."
+    end
+    return false, "WoW Interface " .. current .. " / addon " .. supported
+end
+
+function Addon.SetSetting(key, value)
+    if not initialized then return false end
+    if not ((key == "enabled" and type(value) == "boolean")
+        or (key == "fontSize" and numberInRange(value, 8, 24))
+        or (key == "gap" and numberInRange(value, 0, 20))
+        or (key == "color" and validColor(value))) then return false end
+    BetterForeverNamesDB[key] = value
+    Addon.Refresh()
+    if Addon.UpdateSettings then Addon.UpdateSettings() end
+    return true
+end
+
+function Addon.Reset()
+    for key, value in pairs(defaults) do BetterForeverNamesDB[key] = value end
+    Addon.Refresh()
+    if Addon.UpdateSettings then Addon.UpdateSettings() end
 end
 
 function Addon.Initialize()
@@ -114,19 +153,24 @@ function Addon.Initialize()
     if not validColor(db.color) then db.color = defaults.color end
     initialized = true
     Addon.Refresh()
+    local outdated, message = Addon.Compatibility()
+    if outdated then print("BetterForeverNames: " .. message) end
 end
 
 local function say(message)
     print("BetterForeverNames: " .. message)
 end
 
-local help = "/bfn on | off | size 8-24 | gap 0-20 | color RRGGBB | status | reset"
+local help = "/bfn (settings) | on | off | size 8-24 | gap 0-20 | color RRGGBB | status | reset"
 function Addon.Command(message)
     if not initialized then say("waiting for addon settings to load"); return end
     local command, value = (message or ""):match("^%s*(%S*)%s*(.-)%s*$")
     command = command:lower()
     local db = BetterForeverNamesDB
-    if command == "on" then db.enabled = true
+    if command == "" or command == "settings" then
+        if Addon.ShowSettings then Addon.ShowSettings() end
+        return
+    elseif command == "on" then db.enabled = true
     elseif command == "off" then db.enabled = false
     elseif command == "size" and numberInRange(tonumber(value), 8, 24) then db.fontSize = tonumber(value)
     elseif command == "gap" and numberInRange(tonumber(value), 0, 20) then db.gap = tonumber(value)
@@ -140,6 +184,7 @@ function Addon.Command(message)
         return
     else say(help); return end
     Addon.Refresh()
+    if Addon.UpdateSettings then Addon.UpdateSettings() end
     say(state .. ". " .. help)
 end
 
@@ -156,16 +201,8 @@ driver:SetScript("OnEvent", function(_, event, arg)
         Addon.Refresh()
     end
 end)
-local elapsed = 0
-driver:SetScript("OnUpdate", function(_, delta)
-    elapsed = elapsed + delta
-    if elapsed >= 1 then
-        elapsed = 0
-        -- Refresh visible plates only; no guild-roster scans. This also retries
-        -- initially uncached guild info and tracks pooled frames/anchor changes.
-        Addon.Refresh()
-    end
-end)
+-- No per-frame handler. Retry visible guild data at most once per second;
+-- events restart polling when plates appear or the supported context returns.
 for _, event in ipairs({"ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD",
     "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_NAME_UPDATE", "UNIT_FACTION",
     "PLAYER_GUILD_UPDATE", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ZONE_CHANGED_NEW_AREA"}) do
