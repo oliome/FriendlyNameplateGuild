@@ -1,0 +1,8 @@
+{
+  "product": "wowf",
+  "channel": "live",
+  "interface": 16001,
+  "build": 70862,
+  "addon_version": "0.1.0",
+  "runtime_ready": false
+}

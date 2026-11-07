@@ -1,0 +1,103 @@
+name: Forever compatibility
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: forever-compatibility
+  cancel-in-progress: false
+jobs:
+  candidate:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.state.outputs.changed }}
+      ready: ${{ steps.state.outputs.ready }}
+      version: ${{ steps.state.outputs.version }}
+      base: ${{ steps.state.outputs.base }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Validate baseline
+        run: python -m unittest discover -s tests -v
+      - name: Stage observation
+        env:
+          FEED_URL: ${{ vars.FOREVER_BUILD_FEED_URL }}
+        run: |
+          if [ -z "$FEED_URL" ]; then
+            echo 'Configure FOREVER_BUILD_FEED_URL using docs/AUTOMATION.md; no update was attempted.' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          python tools/compatibility.py --feed "$FEED_URL"
+      - name: Test candidate
+        run: python -m unittest discover -s tests -v
+      - name: Record candidate
+        id: state
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          state = json.loads(Path('compatibility.json').read_text())
+          changed = bool(subprocess.check_output(['git', 'diff', '--name-only']))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print(f'changed={str(changed).lower()}', file=output)
+              print(f'ready={str(state.get("runtime_ready") is True).lower()}', file=output)
+              print(f'version={state["addon_version"]}', file=output)
+              print('base=' + subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(), file=output)
+          PY
+      - name: Retain tested candidate for review or release
+        if: steps.state.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: compatibility-candidate
+          path: |
+            compatibility.json
+            addon/
+          retention-days: 30
+      - name: Explain release state
+        env:
+          AUTO_RELEASE: ${{ vars.AUTO_RELEASE }}
+          READY: ${{ steps.state.outputs.ready }}
+        run: |
+          echo "Candidate checks passed. AUTO_RELEASE=$AUTO_RELEASE; runtime_ready=$READY." >> "$GITHUB_STEP_SUMMARY"
+          echo 'No release occurs unless both are true and an Interface change was found.' >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    needs: candidate
+    if: needs.candidate.outputs.changed == 'true' && needs.candidate.outputs.ready == 'true' && vars.AUTO_RELEASE == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.candidate.outputs.base }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: compatibility-candidate
+          path: .
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify downloaded candidate and package
+        run: |
+          python -m unittest discover -s tests -v
+          python tools/compatibility.py --package
+      - name: Commit and publish tested files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          VERSION: ${{ needs.candidate.outputs.version }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add compatibility.json addon/BetterForeverNames/BetterForeverNames.toc
+          git commit -m "chore: Forever compatibility v$VERSION"
+          git tag "v$VERSION"
+          git push --atomic origin "HEAD:refs/heads/$DEFAULT_BRANCH" "refs/tags/v$VERSION"
+          gh release create "v$VERSION" "dist/BetterForeverNames-$VERSION.zip" --verify-tag --title "BetterForeverNames $VERSION" --notes 'Automated Interface metadata update. Candidate checks passed; this run did not launch the WoW client.'

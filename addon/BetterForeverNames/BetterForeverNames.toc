@@ -1,0 +1,5 @@
+## Interface: 16001
+## Title: BetterForeverNames
+## Notes: Development metadata template; overhead name rendering is not implemented.
+## Version: 0.1.0
+## SavedVariables: BetterForeverNamesDB
