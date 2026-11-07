@@ -186,6 +186,42 @@ class GuildNamesTests(unittest.TestCase):
         self.run_lua('visible = {}; namespace.Refresh()')
         self.assertTrue(self.value('timer.cancelled'))
 
+    def test_name_only_setting_changes_only_on_explicit_ui_click(self):
+        self.run_lua('''
+            nameOnlyValue = '0'; cvarWrites = 0
+            C_CVar.GetCVar = function(key) assert(key == 'nameplateShowOnlyNameForFriendlyPlayerUnits'); return nameOnlyValue end
+            C_CVar.SetCVar = function(key, value) assert(key == 'nameplateShowOnlyNameForFriendlyPlayerUnits'); nameOnlyValue = value; cvarWrites = cvarWrites + 1 end
+        ''')
+        self.start()
+        self.run_lua('namespace.ShowSettings()')
+        self.assertEqual(self.value('cvarWrites'), 0)
+        self.assertFalse(self.value('namespace.SettingsWindow.nameOnly.checked'))
+        self.run_lua('namespace.SettingsWindow.nameOnly:SetChecked(true); namespace.SettingsWindow.nameOnly.scripts.OnClick(namespace.SettingsWindow.nameOnly)')
+        self.assertEqual(self.value('nameOnlyValue'), '1')
+        self.run_lua("namespace.Command('off'); namespace.Reset()")
+        self.assertEqual(self.value('cvarWrites'), 1)
+        self.assertEqual(self.value('nameOnlyValue'), '1')
+
+    def test_name_only_setting_respects_combat_and_syncs_external_changes(self):
+        self.run_lua("nameOnlyValue = '0'; C_CVar.GetCVar = function() return nameOnlyValue end; C_CVar.SetCVar = function() error('must not write during combat') end")
+        self.start()
+        self.run_lua('namespace.ShowSettings(); combat = true; namespace.SettingsWindow.nameOnly:SetChecked(true); namespace.SettingsWindow.nameOnly.scripts.OnClick(namespace.SettingsWindow.nameOnly)')
+        self.assertFalse(self.value('namespace.SettingsWindow.nameOnly.checked'))
+        self.assertIn('outside combat', self.value('messages[#messages]'))
+        self.run_lua("nameOnlyValue = '1'; driver.scripts.OnEvent(driver, 'CVAR_UPDATE', 'nameplateShowOnlyNameForFriendlyPlayerUnits')")
+        self.assertTrue(self.value('namespace.SettingsWindow.nameOnly.checked'))
+
+    def test_unavailable_name_only_option_is_disabled(self):
+        self.start()
+        self.run_lua('namespace.ShowSettings()')
+        self.assertFalse(self.value('namespace.SettingsWindow.nameOnly.enabled'))
+
+    def test_name_only_setting_reports_rejected_game_changes(self):
+        self.run_lua("C_CVar.GetCVar = function() return '0' end; C_CVar.SetCVar = function() return false end")
+        self.start()
+        self.assertFalse(self.value('namespace.SetNameOnly(true)'))
+        self.assertIn('could not change', self.value('messages[#messages]'))
+
 
 if __name__ == '__main__':
     unittest.main()

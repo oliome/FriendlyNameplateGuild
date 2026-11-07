@@ -137,6 +137,32 @@ function Addon.SetSetting(key, value)
     return true
 end
 
+function Addon.NameOnly()
+    if not C_CVar or type(C_CVar.GetCVar) ~= "function" then return nil end
+    local ok, value = pcall(C_CVar.GetCVar, "nameplateShowOnlyNameForFriendlyPlayerUnits")
+    if not ok or not accessible(value) then return nil end
+    if value == "1" then return true end
+    if value == "0" then return false end
+    return nil
+end
+
+function Addon.SetNameOnly(enabled)
+    -- This game setting is changed only by an explicit click, never at login.
+    if type(enabled) ~= "boolean" or Addon.NameOnly() == nil then return false end
+    if type(InCombatLockdown) ~= "function" then return false end
+    local combat = InCombatLockdown()
+    if not accessible(combat) or combat then
+        print("FriendlyNameplateGuild: change name-only mode outside combat.")
+        return false
+    end
+    if not C_CVar or type(C_CVar.SetCVar) ~= "function" then return false end
+    local ok = pcall(C_CVar.SetCVar, "nameplateShowOnlyNameForFriendlyPlayerUnits", enabled and "1" or "0")
+    ok = ok and Addon.NameOnly() == enabled
+    if not ok then print("FriendlyNameplateGuild: WoW could not change name-only mode.") end
+    Addon.Refresh()
+    return ok
+end
+
 function Addon.Reset()
     for key, value in pairs(defaults) do FriendlyNameplateGuildDB[key] = value end
     Addon.Refresh()
@@ -190,7 +216,13 @@ end
 
 local driver = CreateFrame("Frame")
 driver:SetScript("OnEvent", function(_, event, arg)
-    if event == "ADDON_LOADED" and arg == addonName then
+    if event == "CVAR_UPDATE" then
+        if not accessible(arg) or type(arg) ~= "string" then return end
+        local key = arg:lower()
+        if key ~= "nameplateshowonlynameforfriendlyplayerunits" and key ~= "nameplateshowfriendlyplayers" then return end
+        Addon.Refresh()
+        if Addon.UpdateSettings then Addon.UpdateSettings() end
+    elseif event == "ADDON_LOADED" and arg == addonName then
         Addon.Initialize()
     elseif event == "PLAYER_LOGIN" then
         Addon.Initialize()
@@ -208,6 +240,7 @@ for _, event in ipairs({"ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD",
     "PLAYER_GUILD_UPDATE", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ZONE_CHANGED_NEW_AREA"}) do
     pcall(driver.RegisterEvent, driver, event)
 end
+pcall(driver.RegisterEvent, driver, "CVAR_UPDATE")
 SLASH_FRIENDLYNAMEPLATEGUILD1 = "/fng"
 SLASH_FRIENDLYNAMEPLATEGUILD2 = "/friendlynameplateguild"
 SlashCmdList.FRIENDLYNAMEPLATEGUILD = Addon.Command

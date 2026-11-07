@@ -79,6 +79,7 @@ local function Widget()
     function widget:SetValueStep(step) self.step = step end
     function widget:SetObeyStepOnDrag() end
     function widget:SetChecked(value) self.checked = value end
+    function widget:SetEnabled(value) self.enabled = value end
     function widget:GetChecked() return self.checked end
     function widget:SetFontObject(value) self.font = value end
     function widget:SetFontHeight(value) self.size = value end
