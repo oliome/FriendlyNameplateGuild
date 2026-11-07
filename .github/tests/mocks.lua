@@ -4,6 +4,7 @@ visible = {}
 guilds = {}
 players = {}
 friends = {}
+enemies = {}
 labels = {}
 messages = {}
 combat = false
@@ -22,17 +23,24 @@ function InCombatLockdown() return combat end
 function IsInInstance() return instance, "none" end
 function UnitIsPlayer(unit) return players[unit] end
 function UnitIsFriend(_, unit) return friends[unit] end
+function UnitCanAttack(_, unit) return enemies[unit] end
 function GetGuildInfo(unit) return guilds[unit] end
 C_NamePlate = {GetNamePlates = function() return visible end}
 C_CVar = {SetCVar = function() error("CVar mutation is forbidden in this fixture") end}
 function UnitName() error("Player-name reads are not needed") end
 function UnitGUID() error("GUID reads are not needed") end
-function hooksecurefunc() error("Blizzard hooks are not needed") end
+function CompactUnitFrame_UpdatePlayerLevelDiff() end
+function hooksecurefunc(name, callback)
+    hookCalls = (hookCalls or 0) + 1
+    local original = _G[name]
+    _G[name] = function(...) original(...); callback(...) end
+end
 
 function MakePlate(unit, guild, friendly, isPlayer)
     guilds[unit] = guild
     players[unit] = isPlayer == nil or isPlayer
     friends[unit] = friendly == nil or friendly
+    enemies[unit] = friendly == false
     local name = {shown = true}
     function name:IsForbidden() return false end
     function name:IsShown() return self.shown end
@@ -58,6 +66,11 @@ function MakePlate(unit, guild, friendly, isPlayer)
         return label
     end
     local plate = {UnitFrame = frame, unit = unit}
+    function frame:GetNamePlateFrame() return plate end
+    frame.PlayerLevelDiffFrame = {alpha = 1}
+    function frame.PlayerLevelDiffFrame:IsForbidden() return false end
+    function frame.PlayerLevelDiffFrame:GetAlpha() return self.alpha end
+    function frame.PlayerLevelDiffFrame:SetAlpha(value) self.alpha = value end
     function plate:IsForbidden() return false end
     function plate:GetUnit() return self.unit end
     return plate
