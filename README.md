@@ -4,6 +4,10 @@ Planning repository for a World of Warcraft: Forever addon that colors **overhea
 
 **Status:** design, compatibility-update foundation, and a separate [read-only diagnostic probe](docs/PROBE.md). This is not yet a working name-coloring addon. The first milestone must prove that Forever exposes the requested overhead text to addons. No in-game behavior has been verified. The owner requires native world text only; stop if unsupported rather than substituting nameplates.
 
+## Download the diagnostic probe
+
+[Download BetterForeverNamesProbe-0.1.0.zip](downloads/BetterForeverNamesProbe-0.1.0.zip?raw=true). Extract the `BetterForeverNamesProbe` folder into Forever's `Interface/AddOns`, enable it in the addon list, and run `/bfnprobe` while targeting a friendly player. See [the probe instructions](docs/PROBE.md). This reports diagnostics without changing name colors or settings.
+
 ## Planned behavior
 
 - Independently enable guild, friend, and class coloring.
@@ -25,4 +29,4 @@ python -m pip install -r requirements-dev.txt
 python -m unittest discover -s tests -v
 ```
 
-The local Git repository's origin is `https://github.com/oliome/BetterForeverNames.git`. Pushing/hosting is deferred at the owner's request. A live build feed and release settings still need to be connected; see the automation setup guide. Passing the current tests validates update logic and mocked probe behavior, not Blizzard's client.
+The Git repository's origin is `https://github.com/oliome/BetterForeverNames.git`. A live build feed and release settings still need to be connected; see the automation setup guide. Passing the current tests validates update logic and mocked probe behavior, not Blizzard's client.

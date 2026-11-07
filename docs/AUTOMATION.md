@@ -27,7 +27,7 @@ For an offline exercise, copy `compatibility.json` to a temporary observation JS
 
 ## Setup on GitHub
 
-1. The owner supplied `https://github.com/oliome/BetterForeverNames.git`, which is configured as this checkout's `origin`. Hosting/pushing is deferred until the end. When ready, verify the hosted repository's default branch and existing history before pushing the local commits; do not create a duplicate repository or overwrite remote history.
+1. The owner supplied `https://github.com/oliome/BetterForeverNames.git`, which is configured as this checkout's `origin`, and authorized pushing the planning repository and diagnostic probe. A remote branch check found no existing branches before the first push. Use `main` as the default branch. The probe download is separate from a production addon release.
 2. Configure `FOREVER_BUILD_FEED_URL`. Enable GitHub Actions and run **Forever compatibility** manually to verify the integration. It polls every six hours; GitHub may delay scheduled jobs. Check Actions notifications for failures.
 3. Complete milestones 1–4 in PLAN.md. Add the actual Lua/runtime/API contract checks to **both workflows**, replacing the current metadata-only test command with a shared full check command. Record in-game validation, then set `runtime_ready` to `true` in a reviewed commit. Publish the initial functional release separately.
 4. Set the repository Actions variable `AUTO_RELEASE` to `true` to enable unattended metadata releases. The default is off while this is only a planning repository. Both this flag and runtime readiness are required. Ensure repository rules allow the Actions bot to push the default branch and tags; otherwise use a tested-candidate PR approach. Do not disable protection rules just to force a release.
