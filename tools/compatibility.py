@@ -9,15 +9,68 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 ROOT = Path(__file__).resolve().parents[1]
 TOC = Path('addon/FriendlyNameplateGuild/FriendlyNameplateGuild.toc')
-BUILD_URL = 'https://raw.githubusercontent.com/Gethe/wow-ui-source/forever/version.txt'
+BUILD_URL = 'https://us.version.battle.net/v2/products/wowf/versions'
 
 
-def newer_build(version, current_build):
-    """A UI mirror can reveal a build change, but cannot supply an Interface."""
-    match = re.fullmatch(r'1\.60\.\d+\.(\d+)', version.strip())
-    if not match:
-        raise ValueError('Unrecognized Forever build; check the source manually')
-    return version.strip() if int(match[1]) > current_build else ''
+def official_observation(text, state):
+    """Read the live wowf region row; never infer Interface from a patch number."""
+    lines = [line.strip() for line in text.splitlines() if line.strip() and not line.startswith('#')]
+    if not lines:
+        raise ValueError('Empty Blizzard version response')
+    headers = [column.split('!', 1)[0] for column in lines[0].split('|')]
+    if len(headers) != len(set(headers)) or not {'Region', 'BuildId', 'VersionsName'} <= set(headers):
+        raise ValueError('Unrecognized Blizzard version schema')
+    rows = []
+    for line in lines[1:]:
+        values = line.split('|')
+        if len(values) != len(headers):
+            raise ValueError('Malformed Blizzard version row')
+        row = dict(zip(headers, values))
+        if row['Region'] == state.get('region', 'us'):
+            rows.append(row)
+    if len(rows) != 1:
+        raise ValueError('Expected exactly one configured region in Blizzard version response')
+    row = rows[0]
+    match = re.fullmatch(r'(1\.\d{1,2}\.\d{1,2})\.([1-9]\d{0,9})', row['VersionsName'])
+    if not match or not re.fullmatch(r'[1-9]\d{0,9}', row['BuildId']) or int(match[2]) != int(row['BuildId']):
+        raise ValueError('Blizzard build and version disagree or are not a recognized Forever version')
+    observed = dict(product='wowf', channel='live', region=row['Region'],
+                    game_version=match[1], build=int(row['BuildId']), source=BUILD_URL)
+    if observed['build'] < state['build']:
+        raise ValueError('Blizzard feed regressed; refusing to downgrade')
+    if observed['build'] == state['build'] and state.get('game_version') and observed['game_version'] != state['game_version']:
+        raise ValueError('Existing build has conflicting game-patch metadata')
+    if observed['game_version'] == state.get('game_version'):
+        observed['interface'] = state['interface']
+        observed['interface_source'] = 'Previously verified Interface for this unchanged game patch'
+    else:
+        observed['interface_error'] = ('New game patch ' + match[1] +
+            ' requires a verified live Interface value; no Interface was inferred.')
+    return observed
+
+
+def fetch_text(url, limit=65536):
+    if not url.startswith('https://'):
+        raise ValueError('Source must use HTTPS')
+    with urlopen(url, timeout=30) as response:
+        if not response.geturl().startswith('https://'):
+            raise ValueError('Source redirected away from HTTPS')
+        raw = response.read(limit + 1)
+    if len(raw) > limit:
+        raise ValueError('Source response too large')
+    return raw.decode('utf-8')
+
+
+def detect(state, feed=None):
+    observation = official_observation(fetch_text(BUILD_URL), state)
+    if 'interface' not in observation and feed:
+        verified = json.loads(fetch_text(feed))
+        validate_observation(verified)
+        if verified['build'] != observation['build']:
+            raise ValueError('Interface feed does not match the official live build')
+        observation.update(interface=verified['interface'], interface_source=feed)
+        observation.pop('interface_error', None)
+    return observation
 
 
 def validate_observation(value):
@@ -50,19 +103,23 @@ def propose(state, observation, toc):
         raise ValueError('TOC and compatibility state disagree')
     if observation['build'] < state['build'] or observation['interface'] < state['interface']:
         raise ValueError('Regressing build/interface observation')
-    if observation['interface'] == state['interface']:
-        return None  # A new build alone does not make the TOC out of date.
+    if observation['build'] == state['build'] and observation['interface'] == state['interface']:
+        return None
     if observation['build'] <= state['build']:
         raise ValueError('New Interface must come from a newer build')
     major, minor, patch = map(int, version.split('.'))
     new = dict(state, interface=observation['interface'], build=observation['build'],
                addon_version=f'{major}.{minor}.{patch + 1}')
+    if 'game_version' in observation:
+        new['game_version'] = observation['game_version']
     updated = re.sub(r'^## Interface: .+$', f"## Interface: {new['interface']}", toc, flags=re.MULTILINE)
     updated = re.sub(r'^## Version: .+$', f"## Version: {new['addon_version']}", updated, flags=re.MULTILINE)
     return new, updated
 
 
 def stage(root, observation):
+    if observation.get('interface_error'):
+        raise ValueError(observation['interface_error'])
     state_path = root / 'compatibility.json'
     state = json.loads(state_path.read_text(encoding='utf-8'))
     proposal = propose(state, observation, (root / TOC).read_text(encoding='utf-8'))
@@ -105,15 +162,26 @@ def main():
     parser.add_argument('--observation', type=Path, help='Local JSON observation for offline checks')
     parser.add_argument('--package', action='store_true')
     parser.add_argument('--preview', action='store_true', help='Explicitly package an unvalidated desktop test build')
-    parser.add_argument('--watch', action='store_true', help='Print a newer Forever mirror build, without inferring Interface or changing files')
+    parser.add_argument('--watch', action='store_true', help='Print a newer official live build without changing files')
+    parser.add_argument('--detect', action='store_true', help='Write the official live observation and GitHub Actions outputs')
+    parser.add_argument('--output', type=Path, default=Path('candidate.json'))
     args = parser.parse_args()
-    if args.watch:
-        if args.package or args.preview or args.feed or args.observation:
-            parser.error('--watch cannot be combined with update/package options')
+    if args.watch or args.detect:
+        if args.package or args.preview or args.observation or (args.watch and args.detect):
+            parser.error('Detection cannot be combined with staging/package options')
         state = json.loads((ROOT / 'compatibility.json').read_text(encoding='utf-8'))
-        with urlopen(BUILD_URL, timeout=30) as response:
-            version = response.read(128).decode('ascii')
-        print(newer_build(version, state['build']))
+        observation = detect(state, args.feed)
+        changed = observation['build'] > state['build']
+        if args.watch:
+            print(f"{observation['game_version']}.{observation['build']}" if changed else '')
+            return
+        args.output.write_text(json.dumps(observation, indent=2) + '\n', encoding='utf-8')
+        import os
+        if os.environ.get('GITHUB_OUTPUT'):
+            with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+                print(f'changed={str(changed).lower()}', file=output)
+                print(f"build={observation['build']}", file=output)
+        print(json.dumps(observation, indent=2))
         return
     if args.package:
         print(package(ROOT, ROOT / 'dist', preview=args.preview))
@@ -123,18 +191,10 @@ def main():
     if bool(args.feed) == bool(args.observation):
         parser.error('Specify exactly one of --feed or --observation')
     if args.feed:
-        if not args.feed.startswith('https://'):
-            raise ValueError('Feed must use HTTPS')
-        with urlopen(args.feed, timeout=30) as response:
-            if not response.geturl().startswith('https://'):
-                raise ValueError('Feed redirected away from HTTPS')
-            raw = response.read(65537)
-            if len(raw) > 65536:
-                raise ValueError('Feed response too large')
-            observation = json.loads(raw)
+        observation = json.loads(fetch_text(args.feed))
     else:
         observation = json.loads(args.observation.read_text(encoding='utf-8'))
-    print('Staged compatibility patch' if stage(ROOT, observation) else 'No Interface change')
+    print('Staged compatibility patch' if stage(ROOT, observation) else 'No live build change')
 
 
 if __name__ == '__main__':

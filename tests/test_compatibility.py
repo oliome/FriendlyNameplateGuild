@@ -5,18 +5,11 @@ import tempfile
 import unittest
 from zipfile import ZipFile
 
-from tools.compatibility import ROOT, TOC, package, propose, stage, newer_build
+from tools.compatibility import ROOT, TOC, package, propose, stage, official_observation, detect
+from unittest.mock import patch
 
 
 class CompatibilityTests(unittest.TestCase):
-    def test_build_watcher_does_not_infer_interface_or_accept_other_products(self):
-        self.assertEqual(newer_build('1.60.1.70862\n', 70862), '')
-        self.assertEqual(newer_build('1.60.1.70863', 70862), '1.60.1.70863')
-        self.assertEqual(newer_build('1.60.1.70000', 70862), '')
-        for value in ('12.1.5.90000', '1.60.2', '<html>', '1.60.1.90000; echo unsafe'):
-            with self.subTest(value=value), self.assertRaises(ValueError):
-                newer_build(value, 70862)
-
     def setUp(self):
         self.state = dict(product='wowf', channel='live', interface=16001,
                           build=70862, addon_version='0.1.0', runtime_ready=False)
@@ -32,8 +25,11 @@ class CompatibilityTests(unittest.TestCase):
         self.assertIn('## Title: FriendlyNameplateGuild\n', toc)
         self.assertFalse(state['runtime_ready'])
 
-    def test_same_interface_new_build_does_not_bump(self):
-        self.assertIsNone(propose(self.state, dict(self.next, interface=16001), self.toc))
+    def test_new_build_with_same_interface_bumps_addon_version_only(self):
+        state, toc = propose(self.state, dict(self.next, interface=16001), self.toc)
+        self.assertEqual(state['addon_version'], '0.1.1')
+        self.assertEqual(state['interface'], 16001)
+        self.assertIn('## Interface: 16001\n', toc)
 
     def test_repeated_observation_is_idempotent(self):
         state, toc = propose(self.state, self.next, self.toc)
@@ -162,6 +158,56 @@ class CompatibilityTests(unittest.TestCase):
     def test_repository_metadata_is_consistent(self):
         state = json.loads((ROOT / 'compatibility.json').read_text())
         self.assertIsNone(propose(state, state, (ROOT / TOC).read_text()))
+
+
+class DetectionTests(unittest.TestCase):
+    HEADER = 'Region!STRING:0|BuildId!DEC:4|VersionsName!String:0\n## seqn = 123\n'
+
+    def setUp(self):
+        self.state = dict(build=70862, game_version='1.60.1', interface=16001, region='us')
+
+    def table(self, row='us|71000|1.60.1.71000'):
+        return self.HEADER + row + '\n'
+
+    def test_selects_configured_live_region_and_reuses_known_patch_interface(self):
+        value = official_observation(self.table('eu|70900|1.60.1.70900\nus|71000|1.60.1.71000'), self.state)
+        self.assertEqual((value['build'], value['interface'], value['game_version']), (71000, 16001, '1.60.1'))
+        self.assertEqual(value['product'], 'wowf')
+
+    def test_unknown_patch_does_not_guess_interface(self):
+        value = official_observation(self.table('us|71000|1.60.2.71000'), self.state)
+        self.assertNotIn('interface', value)
+        self.assertIn('requires a verified', value['interface_error'])
+
+    def test_rejects_wrong_versions_mismatches_duplicates_missing_regions_and_regression(self):
+        for row in ('us|71000|12.1.5.71000', 'us|71000|1.60.1.99999',
+                    'us|71000|bad', 'us|71000|1.60.1.71000\nus|71001|1.60.1.71001',
+                    'eu|71000|1.60.1.71000', 'us|70000|1.60.1.70000',
+                    'us|70862|1.60.2.70862', 'us|71000'):
+            with self.subTest(row=row), self.assertRaises(ValueError):
+                official_observation(self.table(row), self.state)
+
+    def test_rejects_html_empty_and_ambiguous_schema(self):
+        for body in ('', '<html>Unavailable</html>', 'Region|BuildId|VersionsName|Region\nus|71000|1.60.1.71000|us'):
+            with self.subTest(body=body), self.assertRaises(ValueError):
+                official_observation(body, self.state)
+
+    def test_verified_feed_must_match_official_build(self):
+        official = self.table('us|71000|1.60.2.71000')
+        verified = dict(product='wowf', channel='live', build=71000, interface=16002)
+        with patch('tools.compatibility.fetch_text', side_effect=[official, json.dumps(verified)]):
+            self.assertEqual(detect(self.state, 'https://example.com/verified.json')['interface'], 16002)
+        verified['build'] = 70999
+        with patch('tools.compatibility.fetch_text', side_effect=[official, json.dumps(verified)]), self.assertRaises(ValueError):
+            detect(self.state, 'https://example.com/verified.json')
+
+    def test_staging_unverified_patch_preserves_repository_files(self):
+        observation = official_observation(self.table('us|71000|1.60.2.71000'), self.state)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(ValueError, 'requires a verified'):
+                stage(root, observation)
+            self.assertEqual(list(root.iterdir()), [])
 
 
 if __name__ == '__main__':

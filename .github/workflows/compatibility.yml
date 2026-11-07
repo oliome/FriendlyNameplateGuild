@@ -1,118 +1,116 @@
 name: Forever compatibility
 on:
   schedule:
-    - cron: '17 */6 * * *'
+    - cron: '23 * * * *'
   workflow_dispatch:
+    inputs:
+      check_current:
+        description: Run tests even if the live build has not changed
+        type: boolean
+        default: false
+  repository_dispatch:
+    types: [wow-updated]
 permissions:
-  contents: read
+  contents: write
   issues: write
 concurrency:
   group: forever-compatibility
   cancel-in-progress: false
 jobs:
-  candidate:
+  update:
     if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
-    outputs:
-      changed: ${{ steps.state.outputs.changed }}
-      ready: ${{ steps.state.outputs.ready }}
-      version: ${{ steps.state.outputs.version }}
-      base: ${{ steps.state.outputs.base }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - run: python -m pip install -r requirements-dev.txt
-      - name: Validate baseline
-        run: python -m unittest discover -s tests -v
-      - name: Watch Forever builds when no verified Interface feed is configured
-        if: vars.FOREVER_BUILD_FEED_URL == ''
+      - name: Detect the official live Forever build
+        id: detect
         env:
-          GH_TOKEN: ${{ github.token }}
+          INTERFACE_FEED: ${{ vars.FOREVER_BUILD_FEED_URL }}
+        shell: bash
         run: |
-          BUILD=$(python tools/compatibility.py --watch)
-          if [ -n "$BUILD" ]; then
-            TITLE="Forever $BUILD needs compatibility verification"
-            if ! gh issue list --state all --search "$TITLE in:title" --json title --jq '.[].title' | grep -Fxq "$TITLE"; then
-              gh issue create --title "$TITLE" --body 'The Forever UI mirror reports a newer build. Verify the live Interface with GetBuildInfo(), test the addon, and update compatibility.json/TOC using the compatibility tool. A build change alone does not prove the addon is out of date. No version was automatically changed.'
-            fi
-            echo "$TITLE" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$INTERFACE_FEED" ]; then
+            python tools/compatibility.py --detect --feed "$INTERFACE_FEED"
           else
-            echo 'No newer Forever build observed in the UI mirror.' >> "$GITHUB_STEP_SUMMARY"
+            python tools/compatibility.py --detect
           fi
-      - name: Stage observation
-        if: vars.FOREVER_BUILD_FEED_URL != ''
-        env:
-          FEED_URL: ${{ vars.FOREVER_BUILD_FEED_URL }}
-        run: |
-          python tools/compatibility.py --feed "$FEED_URL"
-      - name: Test candidate
-        run: python -m unittest discover -s tests -v
-      - name: Record candidate
-        id: state
+      - name: Install test dependencies
+        id: dependencies
+        if: steps.detect.outputs.changed == 'true' || inputs.check_current == true
+        run: python -m pip install -r requirements-dev.txt
+      - name: Stage the candidate version
+        id: stage
+        if: steps.detect.outputs.changed == 'true'
+        run: python tools/compatibility.py --observation candidate.json
+      - name: Test the candidate
+        id: tests
+        if: always() && steps.dependencies.outcome == 'success' && (steps.detect.outputs.changed == 'true' || inputs.check_current == true)
+        shell: bash
+        run: python -m unittest discover -s tests -v 2>&1 | tee test-results.txt
+      - name: Package only a passing candidate
+        id: package
+        if: success() && steps.stage.outcome == 'success' && steps.tests.outcome == 'success'
+        shell: bash
         run: |
           python - <<'PY'
-          import json, os, subprocess
+          import json, os, shutil
           from pathlib import Path
+          from tools.compatibility import ROOT, package
           state = json.loads(Path('compatibility.json').read_text())
-          changed = bool(subprocess.check_output(['git', 'diff', '--name-only']))
+          preview = state.get('runtime_ready') is not True
+          archive = package(ROOT, ROOT / 'dist', preview=preview)
+          # Keep the player-facing download link current without README edits.
+          target = 'FriendlyNameplateGuild.zip'
+          shutil.copyfile(archive, Path('downloads') / target)
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              print(f'changed={str(changed).lower()}', file=output)
-              print(f'ready={str(state.get("runtime_ready") is True).lower()}', file=output)
-              print(f'version={state["addon_version"]}', file=output)
-              print('base=' + subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(), file=output)
+              print('version=' + state['addon_version'], file=output)
+              print('archive=' + str(archive.relative_to(ROOT)), file=output)
+              print('preview=' + str(preview).lower(), file=output)
           PY
-      - name: Retain tested candidate for review or release
-        if: steps.state.outputs.changed == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: compatibility-candidate
-          path: |
-            compatibility.json
-            addon/
-          retention-days: 30
-      - name: Explain release state
+      - name: Commit and tag the tested update
+        id: publish
+        if: success() && steps.package.outcome == 'success'
         env:
-          AUTO_RELEASE: ${{ vars.AUTO_RELEASE }}
-          READY: ${{ steps.state.outputs.ready }}
-        run: |
-          echo "Candidate checks passed. AUTO_RELEASE=$AUTO_RELEASE; runtime_ready=$READY." >> "$GITHUB_STEP_SUMMARY"
-          echo 'No release occurs unless both are true and an Interface change was found.' >> "$GITHUB_STEP_SUMMARY"
-
-  release:
-    needs: candidate
-    if: needs.candidate.outputs.changed == 'true' && needs.candidate.outputs.ready == 'true' && vars.AUTO_RELEASE == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.candidate.outputs.base }}
-          fetch-depth: 0
-      - uses: actions/download-artifact@v4
-        with:
-          name: compatibility-candidate
-          path: .
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - run: python -m pip install -r requirements-dev.txt
-      - name: Verify downloaded candidate and package
-        run: |
-          python -m unittest discover -s tests -v
-          python tools/compatibility.py --package
-      - name: Commit and publish tested files
-        env:
-          GH_TOKEN: ${{ github.token }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          VERSION: ${{ needs.candidate.outputs.version }}
+          VERSION: ${{ steps.package.outputs.version }}
+        shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add compatibility.json addon/FriendlyNameplateGuild/FriendlyNameplateGuild.toc
-          git commit -m "chore: Forever compatibility v$VERSION"
+          git add compatibility.json addon/FriendlyNameplateGuild/FriendlyNameplateGuild.toc downloads/FriendlyNameplateGuild.zip
+          git commit -m "chore: tested Forever compatibility v$VERSION"
           git tag "v$VERSION"
           git push --atomic origin "HEAD:refs/heads/$DEFAULT_BRANCH" "refs/tags/v$VERSION"
-          gh release create "v$VERSION" "dist/FriendlyNameplateGuild-$VERSION.zip" --verify-tag --title "FriendlyNameplateGuild $VERSION" --notes 'Automated Interface metadata update. Candidate checks passed; this run did not launch the WoW client.'
+      - name: Publish the tested package
+        if: success() && steps.publish.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.package.outputs.version }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+          PREVIEW: ${{ steps.package.outputs.preview }}
+        shell: bash
+        run: |
+          FLAGS=()
+          if [ "$PREVIEW" = true ]; then FLAGS+=(--prerelease); fi
+          gh release create "v$VERSION" "$ARCHIVE" --verify-tag "${FLAGS[@]}" --title "FriendlyNameplateGuild $VERSION" --notes 'Automatic update for a newer live Forever build. Candidate tests passed. CI did not launch the WoW client; preview status is retained until in-game validation.'
+      - name: Retain failure details
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compatibility-failure
+          path: |
+            candidate.json
+            test-results.txt
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Open a deduplicated issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FNG_BUILD: ${{ steps.detect.outputs.build }}
+        run: python tools/report_failure.py
