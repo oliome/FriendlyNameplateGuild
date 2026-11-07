@@ -2,11 +2,13 @@
 
 ## 1. Prove overhead-name support (first, blocking milestone)
 
+Owner decision (2026-11-07): native world text only. If unsupported, stop the coloring implementation; a name-only friendly nameplate alternative is not authorized. A separate read-only probe is available; see PROBE.md.
+
 Test on the installed live Forever client and record `GetBuildInfo()` including its fourth return value (Interface). Start with an isolated probe addon and script errors enabled.
 
 Distinguish native floating world names from Lua nameplate text. Verify whether a supported API can assign different colors to individual friendly players' native overhead names. Inspect Forever's own name/class/Recent Allies CVars and UI code; do not assume a FontString on a nameplate changes native world text. A global color change does not satisfy per-player rules.
 
-Record the API, build, screenshots, and results in `docs/IN_GAME_VALIDATION.md`. Test names with friendly nameplates both on and off. Test guild-only, friend-only, friend + guild, unrelated, class-known, and class-unknown players. If native overhead names cannot be customized, document the limitation and ask the owner whether to proceed with a name-only friendly nameplate alternative. Do not silently substitute chat or unit-frame coloring.
+Record the API, build, screenshots, and results in `docs/IN_GAME_VALIDATION.md`. Test names with friendly nameplates both on and off. Test guild-only, friend-only, friend + guild, unrelated, class-known, and class-unknown players. If native overhead names cannot be customized, document the limitation and stop runtime coloring work, per the owner's decision. Do not substitute nameplates, chat, or unit-frame coloring.
 
 Acceptance: a supported, repeatable demonstration changes one friendly player's overhead name without changing unrelated players, combat behavior, or Recent Allies data. If unsupported, stop runtime implementation and present the evidence.
 

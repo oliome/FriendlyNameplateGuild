@@ -22,6 +22,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - run: python -m pip install -r requirements-dev.txt
       - name: Validate baseline
         run: python -m unittest discover -s tests -v
       - name: Stage observation
@@ -84,6 +85,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - run: python -m pip install -r requirements-dev.txt
       - name: Verify downloaded candidate and package
         run: |
           python -m unittest discover -s tests -v

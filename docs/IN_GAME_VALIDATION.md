@@ -2,6 +2,8 @@
 
 Status: **not performed**. Runtime implementation and automatic public releases are not ready.
 
+2026-11-07 source review: no supported native per-player overhead-color API identified. A read-only probe is ready for client diagnostics (PROBE.md). Only Anniversary was found in the default install; the owner is downloading Forever. The owner explicitly chose native text only and instructed us to stop coloring implementation if unsupported. No game installation was modified. A successful probe report still does not establish native text editability.
+
 Record the following for the first release and any renderer/API change:
 
 - Tester, date, full `GetBuildInfo()` result, live product/channel.
