@@ -8,5 +8,6 @@ read_globals = {
     "SystemFont_NamePlate", "UIParent", "UISpecialFrames", "UnitIsFriend", "UnitIsPlayer",
     "canaccessvalue", "issecrettable", "issecretvalue", "hooksecurefunc",
     "CompactUnitFrame_UpdatePlayerLevelDiff", "UnitCanAttack",
+    "SystemFont_NamePlate_Outlined", "GetTime", "UnitGUID",
 }
 globals = { "FriendlyNameplateGuildDB", "SlashCmdList", "SLASH_FRIENDLYNAMEPLATEGUILD1", "SLASH_FRIENDLYNAMEPLATEGUILD2" }

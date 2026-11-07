@@ -5,6 +5,7 @@ A lightweight **World of Warcraft: Forever** addon that displays guild names ben
 ## Features
 
 - Adds a separate `<Guild Name>` line beneath a player's name.
+- Outlined guild text improves readability against bright backgrounds.
 - Choose the guild text's color, font size, and spacing.
 - Preview your changes in the settings window.
 - Enable WoW's name-only mode directly from the settings window to hide friendly health bars.

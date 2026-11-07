@@ -1,5 +1,6 @@
 SlashCmdList = {}
 SystemFont_NamePlate = "MockLocaleFontFamily"
+SystemFont_NamePlate_Outlined = "MockOutlinedLocaleFontFamily"
 visible = {}
 guilds = {}
 players = {}
@@ -10,6 +11,8 @@ messages = {}
 combat = false
 instance = false
 namespace = {}
+clock = 0
+guids = {}
 UIParent = {}
 UISpecialFrames = {}
 C_Timer = {NewTicker = function(interval, callback)
@@ -28,7 +31,8 @@ function GetGuildInfo(unit) return guilds[unit] end
 C_NamePlate = {GetNamePlates = function() return visible end}
 C_CVar = {SetCVar = function() error("CVar mutation is forbidden in this fixture") end}
 function UnitName() error("Player-name reads are not needed") end
-function UnitGUID() error("GUID reads are not needed") end
+function UnitGUID(unit) return guids[unit] or ("GUID-" .. unit) end
+function GetTime() return clock end
 function CompactUnitFrame_UpdatePlayerLevelDiff() end
 function hooksecurefunc(name, callback)
     hookCalls = (hookCalls or 0) + 1
@@ -61,7 +65,9 @@ function MakePlate(unit, guild, friendly, isPlayer)
         function label:SetTextColor(r, g, b) self.color = {r, g, b} end
         function label:SetText(text) self.text = text end
         function label:Show() self.shown = true end
-        function label:Hide() self.shown = false end
+        function label:Hide() self.shown = false; self.hideCalls = (self.hideCalls or 0) + 1 end
+        function label:SetShadowColor(...) self.shadowColor = {...} end
+        function label:SetShadowOffset(...) self.shadowOffset = {...} end
         labels[#labels + 1] = label
         return label
     end
@@ -97,6 +103,8 @@ local function Widget()
     function widget:SetFontObject(value) self.font = value end
     function widget:SetFontHeight(value) self.size = value end
     function widget:SetTextColor(...) self.color = {...} end
+    function widget:SetShadowColor(...) self.shadowColor = {...} end
+    function widget:SetShadowOffset(...) self.shadowOffset = {...} end
     function widget:SetValue(value)
         self.value = value
         if self.scripts.OnValueChanged then self.scripts.OnValueChanged(self, value) end

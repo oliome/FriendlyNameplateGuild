@@ -31,9 +31,19 @@ end
 
 local function hideAll()
     displayed = 0
-    for _, label in pairs(widgets) do
+    for _, entry in pairs(widgets) do
         -- Only our own text is touched; a recycled Blizzard name is never changed.
-        pcall(label.Hide, label)
+        pcall(entry.label.Hide, entry.label)
+    end
+end
+
+local function hideUnit(unit)
+    if not accessible(unit) or type(unit) ~= "string" then return end
+    for _, entry in pairs(widgets) do
+        if entry.unit == unit then
+            pcall(entry.label.Hide, entry.label)
+            entry.unit, entry.guid, entry.guild, entry.guildTime = nil, nil, nil, nil
+        end
     end
 end
 
@@ -90,7 +100,7 @@ function Addon.UpdateEnemyLevels()
     end
 end
 
-local function draw(plate)
+local function draw(plate, seen)
     if not safeFrame(plate) then return end
     if type(plate.GetUnit) ~= "function" then return end
     local unit = plate:GetUnit()
@@ -107,17 +117,39 @@ local function draw(plate)
     local shown = name:IsShown()
     if not accessible(shown) or not shown then return end
 
+    local entry = widgets[frame]
+    local guid
+    if type(UnitGUID) == "function" then
+        local ok, value = pcall(UnitGUID, unit)
+        if ok and accessible(value) and type(value) == "string" then guid = value end
+    end
+    if entry and (entry.unit ~= unit or entry.guid ~= guid) then
+        entry.guild, entry.guildTime = nil, nil
+    end
+    local now = type(GetTime) == "function" and GetTime() or nil
     local guild = GetGuildInfo(unit)
-    if not accessible(guild) or type(guild) ~= "string" or guild == "" then return end
+    if not accessible(guild) then return end
+    if type(guild) ~= "string" or guild == "" then
+        -- Movement/data refreshes may briefly lose guild info. Reuse it only
+        -- for the same visible GUID, for at most two seconds; never across reuse.
+        if entry and guid and entry.guid == guid and entry.guildTime and now
+            and now - entry.guildTime <= 2 then guild = entry.guild else return end
+    elseif entry then
+        entry.guild, entry.guildTime = guild, now
+    end
 
-    local label = widgets[frame]
-    if not label then
-        label = frame:CreateFontString(nil, "OVERLAY")
-        widgets[frame] = label
-        label:SetFontObject(SystemFont_NamePlate)
+    if not entry then
+        local label = frame:CreateFontString(nil, "OVERLAY")
+        entry = {label = label, guild = guild, guildTime = now}
+        widgets[frame] = entry
+        label:SetFontObject(SystemFont_NamePlate_Outlined or SystemFont_NamePlate)
+        label:SetShadowColor(0, 0, 0, 1)
+        label:SetShadowOffset(1, -1)
         label:SetJustifyH("CENTER")
         label:SetWordWrap(false)
     end
+    entry.unit, entry.guid = unit, guid
+    local label = entry.label
     local settings = FriendlyNameplateGuildDB
     -- Font height preserves the client's locale-specific font family.
     label:SetFontHeight(settings.fontSize)
@@ -128,36 +160,47 @@ local function draw(plate)
         tonumber(settings.color:sub(5, 6), 16) / 255)
     label:SetText("<" .. guild:gsub("|", "||") .. ">")
     label:Show()
+    seen[frame] = true
     displayed = displayed + 1
 end
 
-function Addon.Refresh()
+local function pause(reason)
+    state = reason
     hideAll()
+    polling(false)
+end
+
+function Addon.Refresh()
     if not initialized then return end
     Addon.UpdateEnemyLevels()
-    if not FriendlyNameplateGuildDB.enabled then state = "disabled"; polling(false); return end
+    if not FriendlyNameplateGuildDB.enabled then pause("disabled"); return end
     if type(InCombatLockdown) ~= "function" or type(IsInInstance) ~= "function" then
-        state = "required context API unavailable"; polling(false); return
+        pause("required context API unavailable"); return
     end
     local combat = InCombatLockdown()
-    if not accessible(combat) or combat then state = "paused in combat"; polling(false); return end
+    if not accessible(combat) or combat then pause("paused in combat"); return end
     local instance = IsInInstance()
-    if not accessible(instance) or instance then state = "paused in instances"; polling(false); return end
+    if not accessible(instance) or instance then pause("paused in instances"); return end
     if not C_NamePlate or type(C_NamePlate.GetNamePlates) ~= "function"
         or type(GetGuildInfo) ~= "function" or type(UnitIsPlayer) ~= "function"
         or type(UnitIsFriend) ~= "function" or not SystemFont_NamePlate then
-        state = "required nameplate or guild API unavailable"; polling(false); return
+        pause("required nameplate or guild API unavailable"); return
     end
     local ok, plates = pcall(C_NamePlate.GetNamePlates)
     if not ok or not accessible(plates) or type(plates) ~= "table"
         or (type(issecrettable) == "function" and issecrettable(plates)) then
-        state = "nameplates unavailable"; polling(false); return
+        pause("nameplates unavailable"); return
     end
     state = "active"
+    displayed = 0
+    local seen = {}
     for _, plate in ipairs(plates) do
         -- Unsupported/replaced frames fail locally, without an error flood.
-        local drawn = pcall(draw, plate)
+        local drawn = pcall(draw, plate, seen)
         if not drawn then state = "active; some nameplates unavailable" end
+    end
+    for frame, entry in pairs(widgets) do
+        if not seen[frame] then pcall(entry.label.Hide, entry.label) end
     end
     polling(#plates > 0)
 end
@@ -278,7 +321,14 @@ driver:SetScript("OnEvent", function(_, event, arg)
         Addon.Initialize()
     elseif event == "NAME_PLATE_UNIT_REMOVED" then
         -- The Blizzard handler may not yet have released its pooled frame.
-        hideAll()
+        hideUnit(arg)
+    elseif event == "PLAYER_GUILD_UPDATE" then
+        if accessible(arg) and type(arg) == "string" then
+            for _, entry in pairs(widgets) do
+                if arg == "player" or entry.unit == arg then entry.guild, entry.guildTime = nil, nil end
+            end
+        end
+        Addon.Refresh()
     else
         Addon.Refresh()
     end
