@@ -35,6 +35,6 @@ Use `/fng status` to check whether guild labels are active.
 
 ## Current limitations
 
-This is a **preview release**. Guild labels currently appear only in the open world, outside combat. Players without a guild, hostile players, and NPCs receive no label. Other nameplate addons may not be compatible.
+This is a **preview release**. Guild labels appear in the open world, including during combat, and pause inside instances. Players without a guild, hostile players, and NPCs receive no label. Restricted nameplates are skipped, and other nameplate addons may not be compatible.
 
 The addon requires friendly player nameplates and leaves existing player names and their colors unchanged.

@@ -175,11 +175,9 @@ function Addon.Refresh()
     if not initialized then return end
     Addon.UpdateEnemyLevels()
     if not FriendlyNameplateGuildDB.enabled then pause("disabled"); return end
-    if type(InCombatLockdown) ~= "function" or type(IsInInstance) ~= "function" then
+    if type(IsInInstance) ~= "function" then
         pause("required context API unavailable"); return
     end
-    local combat = InCombatLockdown()
-    if not accessible(combat) or combat then pause("paused in combat"); return end
     local instance = IsInInstance()
     if not accessible(instance) or instance then pause("paused in instances"); return end
     if not C_NamePlate or type(C_NamePlate.GetNamePlates) ~= "function"
@@ -307,7 +305,7 @@ function Addon.Command(message)
     elseif command == "status" then
         Addon.Refresh()
         say(state .. "; visible guild labels=" .. displayed .. "; size=" .. db.fontSize .. "; gap=" .. db.gap .. "; color=#" .. db.color)
-        say("Requires friendly player nameplates; first test build pauses in combat and instances.")
+        say("Requires friendly player nameplates; guild labels pause in instances.")
         return
     else say(help); return end
     Addon.Refresh()
