@@ -95,6 +95,6 @@ end
 function CreateFrame(kind, name)
     local widget = Widget()
     if kind == 'Frame' and name == nil then driver = widget end
-    if name == 'BetterForeverNamesSettings' then widget.TitleText = Widget() end
+    if name == 'FriendlyNameplateGuildSettings' then widget.TitleText = Widget() end
     return widget
 end

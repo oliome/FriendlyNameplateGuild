@@ -10,10 +10,10 @@ class GuildNamesTests(unittest.TestCase):
     def setUp(self):
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         self.lua.execute((ROOT / 'tests/lua/nameplates.lua').read_text(encoding='utf-8'))
-        source = (ROOT / 'addon/BetterForeverNames/GuildNames.lua').read_text(encoding='utf-8')
-        self.lua.execute('assert(loadstring(...))("BetterForeverNames", namespace)', source)
-        settings = (ROOT / 'addon/BetterForeverNames/Settings.lua').read_text(encoding='utf-8')
-        self.lua.execute('assert(loadstring(...))("BetterForeverNames", namespace)', settings)
+        source = (ROOT / 'addon/FriendlyNameplateGuild/GuildNames.lua').read_text(encoding='utf-8')
+        self.lua.execute('assert(loadstring(...))("FriendlyNameplateGuild", namespace)', source)
+        settings = (ROOT / 'addon/FriendlyNameplateGuild/Settings.lua').read_text(encoding='utf-8')
+        self.lua.execute('assert(loadstring(...))("FriendlyNameplateGuild", namespace)', settings)
 
     def run_lua(self, code):
         self.lua.execute(code)
@@ -23,7 +23,7 @@ class GuildNamesTests(unittest.TestCase):
 
     def start(self, setup="visible = {MakePlate('nameplate1', 'Azeroth Explorers')}"):
         self.run_lua(setup)
-        self.run_lua("driver.scripts.OnEvent(driver, 'ADDON_LOADED', 'BetterForeverNames')")
+        self.run_lua("driver.scripts.OnEvent(driver, 'ADDON_LOADED', 'FriendlyNameplateGuild')")
 
     def test_friendly_player_guild_appears_below_existing_name(self):
         self.start()
@@ -107,23 +107,23 @@ class GuildNamesTests(unittest.TestCase):
         self.assertTrue(self.value('labels[1].shown'))
 
     def test_invalid_settings_commands_and_reset(self):
-        self.run_lua("BetterForeverNamesDB = {enabled = 'yes', fontSize = 100, gap = -5, color = 'oops'}")
+        self.run_lua("FriendlyNameplateGuildDB = {enabled = 'yes', fontSize = 100, gap = -5, color = 'oops'}")
         self.start()
-        self.assertEqual(self.value('BetterForeverNamesDB.fontSize'), 11)
+        self.assertEqual(self.value('FriendlyNameplateGuildDB.fontSize'), 11)
         self.run_lua("namespace.Command('size nan'); namespace.Command('size 25'); namespace.Command('gap -1'); namespace.Command('color invalid')")
-        self.assertEqual(self.value('BetterForeverNamesDB.fontSize'), 11)
-        self.assertEqual(self.value('BetterForeverNamesDB.gap'), 2)
-        self.assertEqual(self.value('BetterForeverNamesDB.color'), '66ff99')
+        self.assertEqual(self.value('FriendlyNameplateGuildDB.fontSize'), 11)
+        self.assertEqual(self.value('FriendlyNameplateGuildDB.gap'), 2)
+        self.assertEqual(self.value('FriendlyNameplateGuildDB.color'), '66ff99')
         self.run_lua("namespace.Command('off'); namespace.Command('size 15'); namespace.Command('reset')")
-        self.assertTrue(self.value('BetterForeverNamesDB.enabled'))
-        self.assertEqual(self.value('BetterForeverNamesDB.fontSize'), 11)
+        self.assertTrue(self.value('FriendlyNameplateGuildDB.enabled'))
+        self.assertEqual(self.value('FriendlyNameplateGuildDB.fontSize'), 11)
 
     def test_saved_settings_are_preserved_and_unrelated_addon_load_ignored(self):
-        self.run_lua("BetterForeverNamesDB = {enabled = false, fontSize = 14, gap = 4, color = 'aabbcc'}; driver.scripts.OnEvent(driver, 'ADDON_LOADED', 'OtherAddon')")
+        self.run_lua("FriendlyNameplateGuildDB = {enabled = false, fontSize = 14, gap = 4, color = 'aabbcc'}; driver.scripts.OnEvent(driver, 'ADDON_LOADED', 'OtherAddon')")
         self.assertEqual(self.value('#labels'), 0)
         self.start()
-        self.assertEqual(self.value('BetterForeverNamesDB.fontSize'), 14)
-        self.assertFalse(self.value('BetterForeverNamesDB.enabled'))
+        self.assertEqual(self.value('FriendlyNameplateGuildDB.fontSize'), 14)
+        self.assertFalse(self.value('FriendlyNameplateGuildDB.enabled'))
         self.assertEqual(self.value('#labels'), 0)
 
     def test_guild_text_cannot_inject_wow_color_markup(self):
@@ -136,7 +136,7 @@ class GuildNamesTests(unittest.TestCase):
         self.run_lua("namespace.Command('')")
         self.assertTrue(self.value('namespace.SettingsWindow.shown'))
         self.run_lua('namespace.SettingsWindow.size:SetValue(15); namespace.SettingsWindow.gap:SetValue(4)')
-        self.assertEqual(self.value('BetterForeverNamesDB.fontSize'), 15)
+        self.assertEqual(self.value('FriendlyNameplateGuildDB.fontSize'), 15)
         self.assertEqual(self.value('labels[1].size'), 15)
         self.assertEqual(self.value('labels[1].anchor[5]'), -4)
         self.run_lua('namespace.SettingsWindow.enabled:SetChecked(false); namespace.SettingsWindow.enabled.scripts.OnClick(namespace.SettingsWindow.enabled)')
@@ -158,10 +158,10 @@ class GuildNamesTests(unittest.TestCase):
             namespace.SettingsWindow.color.scripts.OnClick()
             ColorPickerFrame.info.swatchFunc()
         ''')
-        self.assertEqual(self.value('BetterForeverNamesDB.color'), 'ff0000')
+        self.assertEqual(self.value('FriendlyNameplateGuildDB.color'), 'ff0000')
         self.assertEqual(self.value('namespace.SettingsWindow.preview.color[1]'), 1)
         self.run_lua('ColorPickerFrame.info.cancelFunc()')
-        self.assertEqual(self.value('BetterForeverNamesDB.color'), '66ff99')
+        self.assertEqual(self.value('FriendlyNameplateGuildDB.color'), '66ff99')
 
     def test_runtime_interface_warning_uses_metadata_not_build_number(self):
         self.run_lua('''

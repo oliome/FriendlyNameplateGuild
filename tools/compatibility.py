@@ -8,7 +8,7 @@ from urllib.request import urlopen
 from zipfile import ZipFile, ZIP_DEFLATED
 
 ROOT = Path(__file__).resolve().parents[1]
-TOC = Path('addon/BetterForeverNames/BetterForeverNames.toc')
+TOC = Path('addon/FriendlyNameplateGuild/FriendlyNameplateGuild.toc')
 BUILD_URL = 'https://raw.githubusercontent.com/Gethe/wow-ui-source/forever/version.txt'
 
 
@@ -81,7 +81,7 @@ def package(root, destination, preview=False):
         raise ValueError('Runtime not validated; packaging is disabled')
     toc = (root / TOC).read_text(encoding='utf-8')
     propose(state, state, toc)  # Also verify version/TOC consistency.
-    folder = root / 'addon/BetterForeverNames'
+    folder = root / 'addon/FriendlyNameplateGuild'
     listed = [line.strip() for line in toc.splitlines() if line.strip() and not line.startswith('#')]
     if not listed or not any(line.endswith('.lua') for line in listed):
         raise ValueError('No runtime Lua files in TOC')
@@ -91,7 +91,7 @@ def package(root, destination, preview=False):
             raise ValueError(f'Invalid TOC file: {name}')
     destination.mkdir(parents=True, exist_ok=True)
     suffix = '-preview' if preview else ''
-    archive = destination / f"BetterForeverNames-{state['addon_version']}{suffix}.zip"
+    archive = destination / f"FriendlyNameplateGuild-{state['addon_version']}{suffix}.zip"
     with ZipFile(archive, 'w', ZIP_DEFLATED) as output:
         for path in sorted(folder.rglob('*')):
             if path.is_file():

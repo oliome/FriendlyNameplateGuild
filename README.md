@@ -1,12 +1,14 @@
-# BetterForeverNames
+# FriendlyNameplateGuild
 
-A small World of Warcraft: Forever addon that shows guild names beneath friendly player nameplates. Open **`/bfn`** for its settings window: enable/disable, font size, spacing, color picker, preview, and Reset. Changes apply immediately and are saved.
+A small World of Warcraft: Forever addon that shows guild names beneath friendly player nameplates. Open **`/fng`** (or `/friendlynameplateguild`) for its settings window: enable/disable, font size, spacing, color picker, preview, and Reset. Changes apply immediately and are saved.
 
 ## Install
 
-[Download 0.3.0 preview](downloads/BetterForeverNames-0.3.0-preview.zip?raw=true). Extract `BetterForeverNames` into `_forever_/Interface/AddOns`, restart WoW, and enable the addon. Enable friendly **player** nameplates in the game's own settings. You can use name-only mode to hide health bars.
+[Download 0.4.0 preview](downloads/FriendlyNameplateGuild-0.4.0-preview.zip?raw=true). Extract `FriendlyNameplateGuild` into `_forever_/Interface/AddOns`, restart WoW, and enable the addon. Enable friendly **player** nameplates in the game's own settings. You can use name-only mode to hide health bars.
 
-Guilded friendly players get a separate guild line. Existing player names/colors are left alone. Labels pause in combat and instances, and restricted/replaced plates are skipped. Version 0.3.0 is awaiting live-client testing; automated tests use mocked WoW APIs. If a label is missing, run `/bfn status` and check for Lua errors.
+When upgrading from the previous addon name, remove the previous addon folder before installing this one to avoid duplicate labels. The renamed addon starts with fresh settings.
+
+Guilded friendly players get a separate guild line. Existing player names/colors are left alone. Labels pause in combat and instances, and restricted/replaced plates are skipped. Version 0.4.0 is awaiting live-client testing; automated tests use mocked WoW APIs. If a label is missing, run `/fng status` and check for Lua errors.
 
 ## Lightweight runtime
 

@@ -20,7 +20,7 @@ class CompatibilityTests(unittest.TestCase):
     def setUp(self):
         self.state = dict(product='wowf', channel='live', interface=16001,
                           build=70862, addon_version='0.1.0', runtime_ready=False)
-        self.toc = '## Interface: 16001\n## Title: BetterForeverNames\n## Version: 0.1.0\n'
+        self.toc = '## Interface: 16001\n## Title: FriendlyNameplateGuild\n## Version: 0.1.0\n'
         self.next = dict(product='wowf', channel='live', interface=16002, build=71000)
 
     def test_interface_bump_updates_both_versions_and_preserves_metadata(self):
@@ -29,7 +29,7 @@ class CompatibilityTests(unittest.TestCase):
                          (16002, '0.1.1', 71000))
         self.assertIn('## Interface: 16002\n', toc)
         self.assertIn('## Version: 0.1.1\n', toc)
-        self.assertIn('## Title: BetterForeverNames\n', toc)
+        self.assertIn('## Title: FriendlyNameplateGuild\n', toc)
         self.assertFalse(state['runtime_ready'])
 
     def test_same_interface_new_build_does_not_bump(self):
@@ -145,7 +145,7 @@ class CompatibilityTests(unittest.TestCase):
             (root / TOC.parent / 'Core.lua').write_text('-- test fixture only', encoding='utf-8')
             with ZipFile(package(root, root / 'dist')) as archive:
                 self.assertEqual(set(archive.namelist()),
-                                 {'BetterForeverNames/BetterForeverNames.toc', 'BetterForeverNames/Core.lua'})
+                                 {'FriendlyNameplateGuild/FriendlyNameplateGuild.toc', 'FriendlyNameplateGuild/Core.lua'})
 
     def test_explicit_preview_is_separate_and_does_not_enable_releases(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -154,7 +154,7 @@ class CompatibilityTests(unittest.TestCase):
             (root / TOC).write_text(self.toc + 'Core.lua\n', encoding='utf-8')
             (root / TOC.parent / 'Core.lua').write_text('-- preview fixture', encoding='utf-8')
             archive = package(root, root / 'dist', preview=True)
-            self.assertEqual(archive.name, 'BetterForeverNames-0.1.0-preview.zip')
+            self.assertEqual(archive.name, 'FriendlyNameplateGuild-0.1.0-preview.zip')
             self.assertFalse(json.loads((root / 'compatibility.json').read_text())['runtime_ready'])
             with self.assertRaisesRegex(ValueError, 'Runtime not validated'):
                 package(root, root / 'dist')

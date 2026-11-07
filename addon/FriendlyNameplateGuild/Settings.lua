@@ -14,7 +14,7 @@ end
 
 local function slider(parent, key, title, y, low, high)
     local caption = text(parent, title, 22, y)
-    local control = CreateFrame("Slider", "BetterForeverNames_" .. key, parent, "OptionsSliderTemplate")
+    local control = CreateFrame("Slider", "FriendlyNameplateGuild_" .. key, parent, "OptionsSliderTemplate")
     control:SetPoint("TOPLEFT", 24, y - 24)
     control:SetWidth(350)
     control:SetMinMaxValues(low, high)
@@ -29,7 +29,7 @@ end
 function Addon.UpdateSettings()
     if not window then return end
     syncing = true
-    local db = BetterForeverNamesDB
+    local db = FriendlyNameplateGuildDB
     window.enabled:SetChecked(db.enabled)
     window.size:SetValue(db.fontSize)
     window.gap:SetValue(db.gap)
@@ -50,10 +50,10 @@ local function chooseColor()
         C_AddOns.LoadAddOn("Blizzard_ColorPickerFrame")
     end
     if not ColorPickerFrame or not ColorPickerFrame.SetupColorPickerAndShow then
-        print("BetterForeverNames: color picker unavailable; use /bfn color RRGGBB.")
+        print("FriendlyNameplateGuild: color picker unavailable; use /fng color RRGGBB.")
         return
     end
-    local original = BetterForeverNamesDB.color
+    local original = FriendlyNameplateGuildDB.color
     local r, g, b = rgb(original)
     ColorPickerFrame:SetupColorPickerAndShow({r = r, g = g, b = b, hasOpacity = false,
         swatchFunc = function()
@@ -68,13 +68,13 @@ end
 function Addon.ShowSettings()
     -- Build the entire UI only when requested; use Blizzard widgets, no libraries.
     if not window then
-        window = CreateFrame("Frame", "BetterForeverNamesSettings", UIParent, "BasicFrameTemplateWithInset")
+        window = CreateFrame("Frame", "FriendlyNameplateGuildSettings", UIParent, "BasicFrameTemplateWithInset")
         Addon.SettingsWindow = window
         window:SetSize(410, 440)
         window:SetPoint("CENTER")
         window:SetFrameStrata("DIALOG")
-        window.TitleText:SetText("BetterForeverNames")
-        if UISpecialFrames then table.insert(UISpecialFrames, "BetterForeverNamesSettings") end
+        window.TitleText:SetText("FriendlyNameplateGuild")
+        if UISpecialFrames then table.insert(UISpecialFrames, "FriendlyNameplateGuildSettings") end
         window.enabled = CreateFrame("CheckButton", nil, window, "UICheckButtonTemplate")
         window.enabled:SetPoint("TOPLEFT", 16, -35)
         text(window, "Show guild names", 52, -44)

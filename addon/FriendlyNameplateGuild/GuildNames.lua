@@ -70,7 +70,7 @@ local function draw(plate)
         label:SetJustifyH("CENTER")
         label:SetWordWrap(false)
     end
-    local settings = BetterForeverNamesDB
+    local settings = FriendlyNameplateGuildDB
     -- Font height preserves the client's locale-specific font family.
     label:SetFontHeight(settings.fontSize)
     label:ClearAllPoints()
@@ -86,7 +86,7 @@ end
 function Addon.Refresh()
     hideAll()
     if not initialized then return end
-    if not BetterForeverNamesDB.enabled then state = "disabled"; polling(false); return end
+    if not FriendlyNameplateGuildDB.enabled then state = "disabled"; polling(false); return end
     if type(InCombatLockdown) ~= "function" or type(IsInInstance) ~= "function" then
         state = "required context API unavailable"; polling(false); return
     end
@@ -131,22 +131,22 @@ function Addon.SetSetting(key, value)
         or (key == "fontSize" and numberInRange(value, 8, 24))
         or (key == "gap" and numberInRange(value, 0, 20))
         or (key == "color" and validColor(value))) then return false end
-    BetterForeverNamesDB[key] = value
+    FriendlyNameplateGuildDB[key] = value
     Addon.Refresh()
     if Addon.UpdateSettings then Addon.UpdateSettings() end
     return true
 end
 
 function Addon.Reset()
-    for key, value in pairs(defaults) do BetterForeverNamesDB[key] = value end
+    for key, value in pairs(defaults) do FriendlyNameplateGuildDB[key] = value end
     Addon.Refresh()
     if Addon.UpdateSettings then Addon.UpdateSettings() end
 end
 
 function Addon.Initialize()
     if initialized then return end
-    if type(BetterForeverNamesDB) ~= "table" then BetterForeverNamesDB = {} end
-    local db = BetterForeverNamesDB
+    if type(FriendlyNameplateGuildDB) ~= "table" then FriendlyNameplateGuildDB = {} end
+    local db = FriendlyNameplateGuildDB
     if type(db.enabled) ~= "boolean" then db.enabled = defaults.enabled end
     if not numberInRange(db.fontSize, 8, 24) then db.fontSize = defaults.fontSize end
     if not numberInRange(db.gap, 0, 20) then db.gap = defaults.gap end
@@ -154,19 +154,19 @@ function Addon.Initialize()
     initialized = true
     Addon.Refresh()
     local outdated, message = Addon.Compatibility()
-    if outdated then print("BetterForeverNames: " .. message) end
+    if outdated then print("FriendlyNameplateGuild: " .. message) end
 end
 
 local function say(message)
-    print("BetterForeverNames: " .. message)
+    print("FriendlyNameplateGuild: " .. message)
 end
 
-local help = "/bfn (settings) | on | off | size 8-24 | gap 0-20 | color RRGGBB | status | reset"
+local help = "/fng (settings) | on | off | size 8-24 | gap 0-20 | color RRGGBB | status | reset"
 function Addon.Command(message)
     if not initialized then say("waiting for addon settings to load"); return end
     local command, value = (message or ""):match("^%s*(%S*)%s*(.-)%s*$")
     command = command:lower()
-    local db = BetterForeverNamesDB
+    local db = FriendlyNameplateGuildDB
     if command == "" or command == "settings" then
         if Addon.ShowSettings then Addon.ShowSettings() end
         return
@@ -208,5 +208,6 @@ for _, event in ipairs({"ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD",
     "PLAYER_GUILD_UPDATE", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ZONE_CHANGED_NEW_AREA"}) do
     pcall(driver.RegisterEvent, driver, event)
 end
-SLASH_BETTERFOREVERNAMES1 = "/bfn"
-SlashCmdList.BETTERFOREVERNAMES = Addon.Command
+SLASH_FRIENDLYNAMEPLATEGUILD1 = "/fng"
+SLASH_FRIENDLYNAMEPLATEGUILD2 = "/friendlynameplateguild"
+SlashCmdList.FRIENDLYNAMEPLATEGUILD = Addon.Command
