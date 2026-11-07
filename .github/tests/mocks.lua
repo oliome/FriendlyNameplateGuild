@@ -22,6 +22,7 @@ C_Timer = {NewTicker = function(interval, callback)
 end}
 
 function print(message) messages[#messages + 1] = message end
+DEFAULT_CHAT_FRAME = {AddMessage = function(_, message) messages[#messages + 1] = message end}
 function InCombatLockdown() return combat end
 function IsInInstance() return instance, "none" end
 function UnitIsPlayer(unit) return players[unit] end

@@ -9,5 +9,6 @@ read_globals = {
     "canaccessvalue", "issecrettable", "issecretvalue", "hooksecurefunc",
     "CompactUnitFrame_UpdatePlayerLevelDiff", "UnitCanAttack",
     "SystemFont_NamePlate_Outlined", "GetTime", "UnitGUID",
+    "DEFAULT_CHAT_FRAME",
 }
 globals = { "FriendlyNameplateGuildDB", "SlashCmdList", "SLASH_FRIENDLYNAMEPLATEGUILD1", "SLASH_FRIENDLYNAMEPLATEGUILD2" }

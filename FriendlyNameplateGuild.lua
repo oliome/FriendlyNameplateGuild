@@ -7,6 +7,7 @@ local displayed = 0
 local ticker
 local hiddenLevels = setmetatable({}, {__mode = "k"})
 local levelHooked = false
+local warnedOutdated = false
 
 local function polling(wanted)
     if not wanted and ticker then ticker:Cancel(); ticker = nil end
@@ -217,6 +218,15 @@ function Addon.Compatibility()
     return false, "WoW Interface " .. current .. " / addon " .. supported
 end
 
+function Addon.WarnIfOutdated()
+    if warnedOutdated then return end
+    local outdated, message = Addon.Compatibility()
+    if not outdated or not DEFAULT_CHAT_FRAME or type(DEFAULT_CHAT_FRAME.AddMessage) ~= "function" then return end
+    DEFAULT_CHAT_FRAME:AddMessage("|cffff9900FriendlyNameplateGuild is out of date.|r " .. message
+        .. " Download: https://github.com/oliome/FriendlyNameplateGuild/releases")
+    warnedOutdated = true
+end
+
 function Addon.SetSetting(key, value)
     if not initialized then return false end
     if not (((key == "enabled" or key == "hideEnemyLevels") and type(value) == "boolean")
@@ -272,8 +282,6 @@ function Addon.Initialize()
     if not validColor(db.color) then db.color = defaults.color end
     initialized = true
     Addon.Refresh()
-    local outdated, message = Addon.Compatibility()
-    if outdated then print("FriendlyNameplateGuild: " .. message) end
 end
 
 local function say(message)
@@ -319,6 +327,10 @@ driver:SetScript("OnEvent", function(_, event, arg)
         Addon.Initialize()
     elseif event == "PLAYER_LOGIN" then
         Addon.Initialize()
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        Addon.Initialize()
+        Addon.Refresh()
+        Addon.WarnIfOutdated()
     elseif event == "NAME_PLATE_UNIT_REMOVED" then
         -- The Blizzard handler may not yet have released its pooled frame.
         hideUnit(arg)

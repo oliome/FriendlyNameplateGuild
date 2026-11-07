@@ -12,6 +12,7 @@ A lightweight **World of Warcraft: Forever** addon that displays guild names ben
 - Optionally hide enemy level badges, including their skull icon, without hiding enemy health bars.
 - Toggle guild labels on or off and reset settings to defaults.
 - Saves your preferences between sessions.
+- Shows a chat warning after login if the game requires a newer addon Interface version.
 
 ## Installation
 
