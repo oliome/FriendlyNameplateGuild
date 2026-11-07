@@ -4,3 +4,4 @@ dist/
 candidate/
 .venv/
 .test-deps/
+.research/

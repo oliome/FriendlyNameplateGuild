@@ -1,0 +1,26 @@
+{
+  "source": "https://github.com/Gethe/wow-ui-source",
+  "commit": "9dc84f0d3bbae1768ac3405b3716000bd93eda06",
+  "version": "1.60.1.70862",
+  "method": "rg search of Interface plus targeted source reads",
+  "recent_ally_font_color_literal_references_in_lua_xml": [],
+  "recent_allies_api_functions": [
+    "CanSetRecentAllyNote",
+    "GetRecentAllies",
+    "GetRecentAllyByFullName",
+    "GetRecentAllyByGUID",
+    "IsInteractionCategoryFilterSupportedForCurrentGameType",
+    "IsRecentAllyByFullName",
+    "IsRecentAllyByGUID",
+    "IsRecentAllyDataReady",
+    "IsRecentAllyPinned",
+    "IsSystemEnabled",
+    "IsSystemSupported",
+    "SearchRecentAllies",
+    "SetRecentAllyNote",
+    "SetRecentAllyPinned",
+    "TryRequestRecentAlliesData"
+  ],
+  "native_renderer_traced": false,
+  "native_coloring_inside_client": "inferred from exposed source; not independently demonstrated"
+}

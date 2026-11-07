@@ -17,3 +17,11 @@ The [generated Forever NamePlate API](https://github.com/Gethe/wow-ui-source/blo
 The [FirstNames author's description](https://www.curseforge.com/wow/addons/firstnames) explicitly says native 3D world names are engine-controlled and implements editable overhead names through name-only friendly nameplates. This is a first-hand addon implementation report supporting the limitation; it is not our own client validation.
 
 Practical conclusion: native per-player coloring appears unsupported; do not implement the rejected nameplate workaround. The remaining client check records the actual build/CVars and accessible Lua plate state, without claiming that nameplate access proves native access. The owner is downloading Forever. Only an Anniversary client was found locally at the default location.
+
+## Owner's desktop report — 2026-11-07
+
+The [supplied probe output](validation/2026-11-07-desktop-probe.txt) reports build `70862`, Interface `16001`, and **project ID `18`**. Use this observed value for this client rather than older beta assumptions about Mainline identity. Friendly player nameplates are off, the older `nameplateShowFriends` CVar is unavailable, and the target has no accessible nameplate. These observations do not establish native world-text editability. The final native-API line is hard-coded source-review context, not a capability detector. See IN_GAME_VALIDATION.md for the resulting stop decision.
+
+## Recent Allies-specific follow-up
+
+The owner supplied a second report with friendly nameplates enabled and accessible Lua name text. Forever is now installed locally. See [the build-matched source trace](RECENT_ALLIES_TRACE.md) for the targeted investigation: exported database colors become Lua copies, the Recent Allies API has no native color setter, no literal Recent Allies font-color reference occurs in the snapshot's Lua/XML, and Lua nameplate class colors take priority over selection color. Native rendering inside the engine remains an inference, not a traced implementation.

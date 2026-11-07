@@ -1,5 +1,6 @@
 ## Interface: 16001
 ## Title: BetterForeverNames
-## Notes: Development metadata template; overhead name rendering is not implemented.
-## Version: 0.1.0
+## Notes: Adds guild names below friendly player nameplates. Experimental open-world build.
+## Version: 0.2.0
 ## SavedVariables: BetterForeverNamesDB
+GuildNames.lua

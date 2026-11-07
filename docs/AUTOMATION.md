@@ -1,12 +1,12 @@
 # Compatibility automation
 
-The workflows and updater are implemented as a foundation. They are **not active on a hosted repository yet**. No Blizzard webhook, authenticated GitHub connection, or trusted live Interface feed is provisioned in this workspace.
+The repository and workflows are hosted on GitHub. Production compatibility publishing remains disabled while `runtime_ready` is false. Git authentication is connected, but no Blizzard webhook or trusted live Interface feed is provisioned. The 0.2.0 guild-label preview is distributed as an explicit test ZIP without opening the production release gate.
 
 ## What triggers a bump
 
 The `## Interface` TOC field controls the client's out-of-date classification. The addon's semantic version is separate. A higher live Interface value stages both an Interface update and a patch-version bump. A new client build with the same Interface produces no update. Older values, another product/channel, malformed data, and a new client family fail closed.
 
-The baseline `16001` / build `70862` is provisional, based on the research notes. Confirm it using the installed client before the first release. Do not derive Interface from the game's displayed patch version.
+The owner-supplied desktop probe confirmed the baseline `16001` / build `70862`. Future observations still need independent verification. Do not derive Interface from the game's displayed patch version.
 
 ## Feed contract
 
@@ -29,7 +29,7 @@ For an offline exercise, copy `compatibility.json` to a temporary observation JS
 
 1. The owner supplied `https://github.com/oliome/BetterForeverNames.git`, which is configured as this checkout's `origin`, and authorized pushing the planning repository and diagnostic probe. A remote branch check found no existing branches before the first push. Use `main` as the default branch. The probe download is separate from a production addon release.
 2. Configure `FOREVER_BUILD_FEED_URL`. Enable GitHub Actions and run **Forever compatibility** manually to verify the integration. It polls every six hours; GitHub may delay scheduled jobs. Check Actions notifications for failures.
-3. Complete milestones 1–4 in PLAN.md. Add the actual Lua/runtime/API contract checks to **both workflows**, replacing the current metadata-only test command with a shared full check command. Record in-game validation, then set `runtime_ready` to `true` in a reviewed commit. Publish the initial functional release separately.
+3. Complete the guild-label preview's in-game validation in PLAN.md. Both workflows now execute the actual guild-label and probe Lua under mocked APIs, alongside metadata tests. Add captured API contract checks as needed; the mocks do not verify runtime restrictions. Record in-game validation, then set `runtime_ready` to `true` in a reviewed commit. Publish the initial functional release separately.
 4. Set the repository Actions variable `AUTO_RELEASE` to `true` to enable unattended metadata releases. The default is off while this is only a planning repository. Both this flag and runtime readiness are required. Ensure repository rules allow the Actions bot to push the default branch and tags; otherwise use a tested-candidate PR approach. Do not disable protection rules just to force a release.
 
 ## Release sequence

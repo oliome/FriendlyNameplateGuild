@@ -65,10 +65,10 @@ def stage(root, observation):
     return True
 
 
-def package(root, destination):
+def package(root, destination, preview=False):
     state = json.loads((root / 'compatibility.json').read_text(encoding='utf-8'))
     validate_observation(state)
-    if state.get('runtime_ready') is not True:
+    if state.get('runtime_ready') is not True and not preview:
         raise ValueError('Runtime not validated; packaging is disabled')
     toc = (root / TOC).read_text(encoding='utf-8')
     propose(state, state, toc)  # Also verify version/TOC consistency.
@@ -81,7 +81,8 @@ def package(root, destination):
         if not path.is_relative_to(folder.resolve()) or not path.is_file():
             raise ValueError(f'Invalid TOC file: {name}')
     destination.mkdir(parents=True, exist_ok=True)
-    archive = destination / f"BetterForeverNames-{state['addon_version']}.zip"
+    suffix = '-preview' if preview else ''
+    archive = destination / f"BetterForeverNames-{state['addon_version']}{suffix}.zip"
     with ZipFile(archive, 'w', ZIP_DEFLATED) as output:
         for path in sorted(folder.rglob('*')):
             if path.is_file():
@@ -94,10 +95,13 @@ def main():
     parser.add_argument('--feed', help='Trusted HTTPS live build-observation JSON URL')
     parser.add_argument('--observation', type=Path, help='Local JSON observation for offline checks')
     parser.add_argument('--package', action='store_true')
+    parser.add_argument('--preview', action='store_true', help='Explicitly package an unvalidated desktop test build')
     args = parser.parse_args()
     if args.package:
-        print(package(ROOT, ROOT / 'dist'))
+        print(package(ROOT, ROOT / 'dist', preview=args.preview))
         return
+    if args.preview:
+        parser.error('--preview requires --package')
     if bool(args.feed) == bool(args.observation):
         parser.error('Specify exactly one of --feed or --observation')
     if args.feed:

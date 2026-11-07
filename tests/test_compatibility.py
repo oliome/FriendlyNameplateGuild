@@ -139,6 +139,18 @@ class CompatibilityTests(unittest.TestCase):
                 self.assertEqual(set(archive.namelist()),
                                  {'BetterForeverNames/BetterForeverNames.toc', 'BetterForeverNames/Core.lua'})
 
+    def test_explicit_preview_is_separate_and_does_not_enable_releases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.prepare_root(root)
+            (root / TOC).write_text(self.toc + 'Core.lua\n', encoding='utf-8')
+            (root / TOC.parent / 'Core.lua').write_text('-- preview fixture', encoding='utf-8')
+            archive = package(root, root / 'dist', preview=True)
+            self.assertEqual(archive.name, 'BetterForeverNames-0.1.0-preview.zip')
+            self.assertFalse(json.loads((root / 'compatibility.json').read_text())['runtime_ready'])
+            with self.assertRaisesRegex(ValueError, 'Runtime not validated'):
+                package(root, root / 'dist')
+
     def test_repository_metadata_is_consistent(self):
         state = json.loads((ROOT / 'compatibility.json').read_text())
         self.assertIsNone(propose(state, state, (ROOT / TOC).read_text()))

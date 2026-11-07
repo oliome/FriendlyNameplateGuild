@@ -1,0 +1,175 @@
+local addonName, Addon = ...
+local initialized = false
+local widgets = setmetatable({}, {__mode = "k"})
+local defaults = {enabled = true, fontSize = 11, gap = 2, color = "66ff99"}
+local state = "waiting for login"
+local displayed = 0
+
+local function accessible(value)
+    if type(issecretvalue) == "function" and issecretvalue(value) then return false end
+    if type(canaccessvalue) == "function" and not canaccessvalue(value) then return false end
+    return true
+end
+
+local function numberInRange(value, low, high)
+    return type(value) == "number" and value == value and value >= low and value <= high
+end
+
+local function validColor(value)
+    return type(value) == "string" and value:match("^%x%x%x%x%x%x$") ~= nil
+end
+
+local function hideAll()
+    displayed = 0
+    for _, label in pairs(widgets) do
+        -- Only our own text is touched; a recycled Blizzard name is never changed.
+        pcall(label.Hide, label)
+    end
+end
+
+local function safeFrame(frame)
+    if not accessible(frame) or frame == nil then return false end
+    if type(frame.IsForbidden) ~= "function" then return false end
+    local forbidden = frame:IsForbidden()
+    return accessible(forbidden) and not forbidden
+end
+
+local function draw(plate)
+    if not safeFrame(plate) then return end
+    if type(plate.GetUnit) ~= "function" then return end
+    local unit = plate:GetUnit()
+    if not accessible(unit) or type(unit) ~= "string" then return end
+    local isPlayer = UnitIsPlayer(unit)
+    if not accessible(isPlayer) or not isPlayer then return end
+    local friendly = UnitIsFriend("player", unit)
+    if not accessible(friendly) or not friendly then return end
+
+    local frame = plate.UnitFrame
+    if not safeFrame(frame) then return end
+    local name = frame.name
+    if not safeFrame(name) then return end
+    local shown = name:IsShown()
+    if not accessible(shown) or not shown then return end
+
+    local guild = GetGuildInfo(unit)
+    if not accessible(guild) or type(guild) ~= "string" or guild == "" then return end
+
+    local label = widgets[frame]
+    if not label then
+        label = frame:CreateFontString(nil, "OVERLAY")
+        widgets[frame] = label
+        label:SetFontObject(SystemFont_NamePlate)
+        label:SetJustifyH("CENTER")
+        label:SetWordWrap(false)
+    end
+    local settings = BetterForeverNamesDB
+    -- Font height preserves the client's locale-specific font family.
+    label:SetFontHeight(settings.fontSize)
+    label:ClearAllPoints()
+    label:SetPoint("TOP", name, "BOTTOM", 0, -settings.gap)
+    label:SetTextColor(tonumber(settings.color:sub(1, 2), 16) / 255,
+        tonumber(settings.color:sub(3, 4), 16) / 255,
+        tonumber(settings.color:sub(5, 6), 16) / 255)
+    label:SetText("<" .. guild:gsub("|", "||") .. ">")
+    label:Show()
+    displayed = displayed + 1
+end
+
+function Addon.Refresh()
+    hideAll()
+    if not initialized then return end
+    if not BetterForeverNamesDB.enabled then state = "disabled"; return end
+    if type(InCombatLockdown) ~= "function" or type(IsInInstance) ~= "function" then
+        state = "required context API unavailable"; return
+    end
+    local combat = InCombatLockdown()
+    if not accessible(combat) or combat then state = "paused in combat"; return end
+    local instance = IsInInstance()
+    if not accessible(instance) or instance then state = "paused in instances"; return end
+    if not C_NamePlate or type(C_NamePlate.GetNamePlates) ~= "function"
+        or type(GetGuildInfo) ~= "function" or type(UnitIsPlayer) ~= "function"
+        or type(UnitIsFriend) ~= "function" or not SystemFont_NamePlate then
+        state = "required nameplate or guild API unavailable"; return
+    end
+    local ok, plates = pcall(C_NamePlate.GetNamePlates)
+    if not ok or not accessible(plates) or type(plates) ~= "table"
+        or (type(issecrettable) == "function" and issecrettable(plates)) then
+        state = "nameplates unavailable"; return
+    end
+    state = "active"
+    for _, plate in ipairs(plates) do
+        -- Unsupported/replaced frames fail locally, without an error flood.
+        local drawn = pcall(draw, plate)
+        if not drawn then state = "active; some nameplates unavailable" end
+    end
+end
+
+function Addon.Initialize()
+    if initialized then return end
+    if type(BetterForeverNamesDB) ~= "table" then BetterForeverNamesDB = {} end
+    local db = BetterForeverNamesDB
+    if type(db.enabled) ~= "boolean" then db.enabled = defaults.enabled end
+    if not numberInRange(db.fontSize, 8, 24) then db.fontSize = defaults.fontSize end
+    if not numberInRange(db.gap, 0, 20) then db.gap = defaults.gap end
+    if not validColor(db.color) then db.color = defaults.color end
+    initialized = true
+    Addon.Refresh()
+end
+
+local function say(message)
+    print("BetterForeverNames: " .. message)
+end
+
+local help = "/bfn on | off | size 8-24 | gap 0-20 | color RRGGBB | status | reset"
+function Addon.Command(message)
+    if not initialized then say("waiting for addon settings to load"); return end
+    local command, value = (message or ""):match("^%s*(%S*)%s*(.-)%s*$")
+    command = command:lower()
+    local db = BetterForeverNamesDB
+    if command == "on" then db.enabled = true
+    elseif command == "off" then db.enabled = false
+    elseif command == "size" and numberInRange(tonumber(value), 8, 24) then db.fontSize = tonumber(value)
+    elseif command == "gap" and numberInRange(tonumber(value), 0, 20) then db.gap = tonumber(value)
+    elseif command == "color" and validColor(value) then db.color = value:lower()
+    elseif command == "reset" then
+        for key, default in pairs(defaults) do db[key] = default end
+    elseif command == "status" then
+        Addon.Refresh()
+        say(state .. "; visible guild labels=" .. displayed .. "; size=" .. db.fontSize .. "; gap=" .. db.gap .. "; color=#" .. db.color)
+        say("Requires friendly player nameplates; first test build pauses in combat and instances.")
+        return
+    else say(help); return end
+    Addon.Refresh()
+    say(state .. ". " .. help)
+end
+
+local driver = CreateFrame("Frame")
+driver:SetScript("OnEvent", function(_, event, arg)
+    if event == "ADDON_LOADED" and arg == addonName then
+        Addon.Initialize()
+    elseif event == "PLAYER_LOGIN" then
+        Addon.Initialize()
+    elseif event == "NAME_PLATE_UNIT_REMOVED" then
+        -- The Blizzard handler may not yet have released its pooled frame.
+        hideAll()
+    else
+        Addon.Refresh()
+    end
+end)
+local elapsed = 0
+driver:SetScript("OnUpdate", function(_, delta)
+    elapsed = elapsed + delta
+    if elapsed >= 1 then
+        elapsed = 0
+        -- Refresh visible plates only; no guild-roster scans. This also retries
+        -- initially uncached guild info and tracks pooled frames/anchor changes.
+        Addon.Refresh()
+    end
+end)
+for _, event in ipairs({"ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD",
+    "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_NAME_UPDATE", "UNIT_FACTION",
+    "PLAYER_GUILD_UPDATE", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ZONE_CHANGED_NEW_AREA"}) do
+    pcall(driver.RegisterEvent, driver, event)
+end
+SLASH_BETTERFOREVERNAMES1 = "/bfn"
+SlashCmdList.BETTERFOREVERNAMES = Addon.Command
