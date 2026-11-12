@@ -1,5 +1,8 @@
 # FriendlyNameplateGuild
 
+<img width="349" height="262" alt="image" src="https://github.com/user-attachments/assets/b81286c1-d2bf-4569-b5e6-5d8117dc2a90" />
+
+
 A lightweight **World of Warcraft: Forever** addon that displays guild names beneath friendly players' nameplates.
 
 ## Features
