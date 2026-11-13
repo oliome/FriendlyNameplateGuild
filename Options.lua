@@ -1,6 +1,6 @@
 local _, Addon = ...
 local window, syncing, category
-local title = "FriendlyNameplateGuild"
+local panelTitle = "FriendlyNameplateGuild"
 
 local function text(parent, value, x, y, font)
     local label = parent:CreateFontString(nil, "OVERLAY", font or "GameFontNormal")
@@ -84,7 +84,7 @@ local function buildSettings(embedded)
             window:SetSize(410, 530)
             window:SetPoint("CENTER")
             window:SetFrameStrata("DIALOG")
-            window.TitleText:SetText(title)
+            window.TitleText:SetText(panelTitle)
             if UISpecialFrames then table.insert(UISpecialFrames, "FriendlyNameplateGuildSettings") end
         end
         window:SetScript("OnShow", Addon.UpdateSettings)
@@ -142,7 +142,7 @@ function Addon.RegisterSettings()
     if window or not Settings or not Settings.RegisterCanvasLayoutCategory
         or not Settings.RegisterAddOnCategory or not Settings.OpenToCategory then return end
     buildSettings(true)
-    category = Settings.RegisterCanvasLayoutCategory(window, title)
+    category = Settings.RegisterCanvasLayoutCategory(window, panelTitle)
     Settings.RegisterAddOnCategory(category)
 end
 
