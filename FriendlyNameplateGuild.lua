@@ -1,18 +1,25 @@
 local addonName, Addon = ...
 local initialized = false
 local widgets = setmetatable({}, {__mode = "k"})
-local defaults = {enabled = true, hideEnemyLevels = false, fontSize = 11, gap = 2, color = "66ff99"}
+local defaults = {enabled = true, showInInstances = false, retryMs = 200,
+    hideEnemyLevels = false, fontSize = 11, gap = 2, color = "66ff99"}
+Addon.retryRange = {min = 100, max = 1000}
 local state = "waiting for login"
 local displayed = 0
-local ticker
+local ticker, tickerInterval
 local hiddenLevels = setmetatable({}, {__mode = "k"})
 local levelHooked = false
 local warnedOutdated = false
 
-local function polling(wanted)
-    if not wanted and ticker then ticker:Cancel(); ticker = nil end
+local function polling(wanted, refresh)
+    local interval = wanted and FriendlyNameplateGuildDB.retryMs / 1000
+    if ticker and interval ~= tickerInterval then
+        ticker:Cancel()
+        ticker = nil
+    end
     if wanted and not ticker and C_Timer and C_Timer.NewTicker then
-        ticker = C_Timer.NewTicker(1, function() Addon.Refresh() end)
+        ticker = C_Timer.NewTicker(interval, refresh)
+        tickerInterval = interval
     end
 end
 
@@ -24,6 +31,10 @@ end
 
 local function numberInRange(value, low, high)
     return type(value) == "number" and value == value and value >= low and value <= high
+end
+
+local function validRetry(value)
+    return numberInRange(value, Addon.retryRange.min, Addon.retryRange.max) and value % 1 == 0
 end
 
 local function validColor(value)
@@ -153,13 +164,25 @@ local function draw(plate, seen)
     local label = entry.label
     local settings = FriendlyNameplateGuildDB
     -- Font height preserves the client's locale-specific font family.
-    label:SetFontHeight(settings.fontSize)
-    label:ClearAllPoints()
-    label:SetPoint("TOP", name, "BOTTOM", 0, -settings.gap)
-    label:SetTextColor(tonumber(settings.color:sub(1, 2), 16) / 255,
-        tonumber(settings.color:sub(3, 4), 16) / 255,
-        tonumber(settings.color:sub(5, 6), 16) / 255)
-    label:SetText("<" .. guild:gsub("|", "||") .. ">")
+    if entry.fontSize ~= settings.fontSize then
+        label:SetFontHeight(settings.fontSize)
+        entry.fontSize = settings.fontSize
+    end
+    if entry.name ~= name or entry.gap ~= settings.gap then
+        label:ClearAllPoints()
+        label:SetPoint("TOP", name, "BOTTOM", 0, -settings.gap)
+        entry.name, entry.gap = name, settings.gap
+    end
+    if entry.color ~= settings.color then
+        label:SetTextColor(tonumber(settings.color:sub(1, 2), 16) / 255,
+            tonumber(settings.color:sub(3, 4), 16) / 255,
+            tonumber(settings.color:sub(5, 6), 16) / 255)
+        entry.color = settings.color
+    end
+    if entry.renderedGuild ~= guild then
+        label:SetText("<" .. guild:gsub("|", "||") .. ">")
+        entry.renderedGuild = guild
+    end
     label:Show()
     seen[frame] = true
     displayed = displayed + 1
@@ -171,15 +194,14 @@ local function pause(reason)
     polling(false)
 end
 
-function Addon.Refresh()
-    if not initialized then return end
-    Addon.UpdateEnemyLevels()
+local function refreshGuildLabels()
     if not FriendlyNameplateGuildDB.enabled then pause("disabled"); return end
     if type(IsInInstance) ~= "function" then
         pause("required context API unavailable"); return
     end
     local instance = IsInInstance()
-    if not accessible(instance) or instance then pause("paused in instances"); return end
+    if not accessible(instance) then pause("instance context unavailable"); return end
+    if instance and not FriendlyNameplateGuildDB.showInInstances then pause("paused in instances"); return end
     if not C_NamePlate or type(C_NamePlate.GetNamePlates) ~= "function"
         or type(GetGuildInfo) ~= "function" or type(UnitIsPlayer) ~= "function"
         or type(UnitIsFriend) ~= "function" or not SystemFont_NamePlate then
@@ -201,7 +223,13 @@ function Addon.Refresh()
     for frame, entry in pairs(widgets) do
         if not seen[frame] then pcall(entry.label.Hide, entry.label) end
     end
-    polling(#plates > 0)
+    polling(#plates > 0, refreshGuildLabels)
+end
+
+function Addon.Refresh()
+    if not initialized then return end
+    Addon.UpdateEnemyLevels()
+    refreshGuildLabels()
 end
 
 function Addon.Compatibility()
@@ -227,9 +255,10 @@ end
 
 function Addon.SetSetting(key, value)
     if not initialized then return false end
-    if not (((key == "enabled" or key == "hideEnemyLevels") and type(value) == "boolean")
+    if not (((key == "enabled" or key == "showInInstances" or key == "hideEnemyLevels") and type(value) == "boolean")
         or (key == "fontSize" and numberInRange(value, 8, 24))
         or (key == "gap" and numberInRange(value, 0, 20))
+        or (key == "retryMs" and validRetry(value))
         or (key == "color" and validColor(value))) then return false end
     FriendlyNameplateGuildDB[key] = value
     Addon.Refresh()
@@ -274,12 +303,15 @@ function Addon.Initialize()
     if type(FriendlyNameplateGuildDB) ~= "table" then FriendlyNameplateGuildDB = {} end
     local db = FriendlyNameplateGuildDB
     if type(db.enabled) ~= "boolean" then db.enabled = defaults.enabled end
+    if type(db.showInInstances) ~= "boolean" then db.showInInstances = defaults.showInInstances end
+    if not validRetry(db.retryMs) then db.retryMs = defaults.retryMs end
     if type(db.hideEnemyLevels) ~= "boolean" then db.hideEnemyLevels = defaults.hideEnemyLevels end
     if not numberInRange(db.fontSize, 8, 24) then db.fontSize = defaults.fontSize end
     if not numberInRange(db.gap, 0, 20) then db.gap = defaults.gap end
     if not validColor(db.color) then db.color = defaults.color end
     initialized = true
     Addon.Refresh()
+    if Addon.RegisterSettings then Addon.RegisterSettings() end
 end
 
 local function say(message)
@@ -305,7 +337,8 @@ function Addon.Command(message)
     elseif command == "status" then
         Addon.Refresh()
         say(state .. "; visible guild labels=" .. displayed .. "; size=" .. db.fontSize .. "; gap=" .. db.gap .. "; color=#" .. db.color)
-        say("Requires friendly player nameplates; guild labels pause in instances.")
+        say("Guild label retry: " .. db.retryMs .. " ms. Show guild names in instances is "
+            .. (db.showInInstances and "on." or "off."))
         return
     else say(help); return end
     Addon.Refresh()
@@ -325,6 +358,7 @@ driver:SetScript("OnEvent", function(_, event, arg)
         Addon.Initialize()
     elseif event == "PLAYER_LOGIN" then
         Addon.Initialize()
+        if Addon.RegisterSettings then Addon.RegisterSettings() end
     elseif event == "PLAYER_ENTERING_WORLD" then
         Addon.Initialize()
         Addon.Refresh()
@@ -343,8 +377,7 @@ driver:SetScript("OnEvent", function(_, event, arg)
         Addon.Refresh()
     end
 end)
--- No per-frame handler. Retry visible guild data at most once per second;
--- events restart polling when plates appear or the supported context returns.
+-- Events restart polling when plates appear or the supported context returns.
 for _, event in ipairs({"ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD",
     "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_NAME_UPDATE", "UNIT_FACTION",
     "PLAYER_GUILD_UPDATE", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ZONE_CHANGED_NEW_AREA"}) do

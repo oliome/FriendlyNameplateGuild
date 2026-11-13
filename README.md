@@ -28,7 +28,11 @@ If upgrading from the addon's previous name, remove its old folder to avoid dupl
 
 ## Settings
 
-Type **`/fng`** or **`/friendlynameplateguild`** to open the settings window. Changes apply immediately.
+Open **Options → AddOns → FriendlyNameplateGuild**, or type **`/fng`** or **`/friendlynameplateguild`**. Changes apply immediately.
+
+**Show guild names in instances** is off by default. Enable it to show guild names on accessible friendly player nameplates inside instances.
+
+**Guild label retry interval** controls how often the addon checks visible nameplates for guild data. It defaults to 200 ms and can be set from 100 to 1,000 ms.
 
 **Show names only** controls WoW's own friendly-player nameplate setting. The addon reads your existing choice and changes it only when you click the checkbox, outside combat. Turning guild labels off or resetting their appearance does not reset this game setting.
 
@@ -38,6 +42,6 @@ Use `/fng status` to check whether guild labels are active.
 
 ## Current limitations
 
-This is a **preview release**. Guild labels appear in the open world, including during combat, and pause inside instances. Players without a guild, hostile players, and NPCs receive no label. Restricted nameplates are skipped, and other nameplate addons may not be compatible.
+This is a **preview release**. Guild labels can appear during combat. Players without a guild, hostile players, and NPCs receive no label. Restricted nameplates are skipped, and other nameplate addons may not be compatible.
 
 The addon requires friendly player nameplates and leaves existing player names and their colors unchanged.

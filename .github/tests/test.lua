@@ -89,6 +89,25 @@ test([=[test_hidden_name_and_removed_plate_hide_guild_line]=], function()
     eq(eval([=[labels[1].shown]=]), false)
 end)
 
+test("instance checkbox shows readable labels immediately and reset turns it off", function()
+    start("instance = true; visible = {MakePlate('friend', 'Instance Guild'), MakePlate('restricted', 'Hidden Guild')}; visible[2].IsForbidden = function() return true end")
+    eq(eval("#labels"), 0)
+    run([=[
+        namespace.ShowSettings()
+        checkbox = namespace.SettingsWindow.showInInstances
+    ]=])
+    eq(eval("checkbox.checked"), false)
+    run("checkbox:SetChecked(true); checkbox.scripts.OnClick(checkbox)")
+    eq(eval("FriendlyNameplateGuildDB.showInInstances"), true)
+    eq(eval("#labels"), 1)
+    eq(eval("labels[1].text"), "<Instance Guild>")
+    eq(eval("labels[1].shown"), true)
+    run("namespace.SettingsWindow.reset.scripts.OnClick()")
+    eq(eval("checkbox.checked"), false)
+    eq(eval("labels[1].shown"), false)
+    eq(eval("timer.cancelled"), true)
+end)
+
 test([=[test_forbidden_plate_is_not_read]=], function()
     start([=[visible = {setmetatable({IsForbidden = function() return true end}, {__index = function() error('forbidden frame read') end})}]=])
     eq(eval([=[#labels]=]), 0)
@@ -188,6 +207,48 @@ test([=[test_color_picker_applies_and_cancel_restores_the_original]=], function(
     eq(eval([=[FriendlyNameplateGuildDB.color]=]), [=[66ff99]=])
 end)
 
+test("WoW AddOns menu and slash command open the same settings panel", function()
+    run([=[
+        Settings = {
+            RegisterCanvasLayoutCategory = function(frame, name)
+                panel, categoryName = frame, name
+                return {GetID = function() return 42 end}
+            end,
+            RegisterAddOnCategory = function(category)
+                registrations = (registrations or 0) + 1
+                registered = category
+            end,
+            OpenToCategory = function(id)
+                opened = id
+                panel:Show()
+            end,
+        }
+    ]=])
+    start()
+    eq(eval("categoryName"), "FriendlyNameplateGuild")
+    eq(eval("panel.shown"), false)
+    run("Settings.OpenToCategory(registered:GetID())")
+    eq(eval("panel.shown"), true)
+    eq(eval("panel.retry.value"), 200)
+    run("opened = nil; namespace.Command(''); driver.scripts.OnEvent(driver, 'PLAYER_LOGIN')")
+    eq(eval("opened"), 42)
+    eq(eval("registrations"), 1)
+end)
+
+test("retry settings replace the active timer and reset the default interval", function()
+    run("FriendlyNameplateGuildDB = {retryMs = 350}")
+    start()
+    near(eval("timer.interval"), 0.35)
+    run("namespace.ShowSettings(); originalTimer = timer; namespace.SettingsWindow.retry:SetValue(500)")
+    eq(eval("originalTimer.cancelled"), true)
+    eq(eval("FriendlyNameplateGuildDB.retryMs"), 500)
+    near(eval("timer.interval"), 0.5)
+    eq(eval("namespace.SetSetting('retryMs', 99)"), false)
+    run("namespace.Reset()")
+    near(eval("timer.interval"), 0.2)
+    eq(eval("namespace.SettingsWindow.retry.value"), 200)
+end)
+
 test([=[test_runtime_interface_warning_uses_metadata_not_build_number]=], function()
     run([=[
             C_AddOns = {GetAddOnMetadata = function() return '16001' end}
@@ -207,6 +268,7 @@ end)
 
 test([=[test_polling_has_no_per_frame_handler_and_stops_when_not_needed]=], function()
     start()
+    near(eval("timer.interval"), 0.2)
     eq(eval([=[driver.scripts.OnUpdate]=]), nil)
     run([=[originalTimer = timer; namespace.Refresh()]=])
     eq(eval([=[timer == originalTimer]=]), true)
@@ -305,8 +367,9 @@ end)
 
 test("ordinary refreshes never hide a valid visible guild label", function()
     start()
-    run("namespace.Refresh(); namespace.Refresh(); timer.callback()")
+    run("originalAnchor = labels[1].anchor; namespace.Refresh(); namespace.Refresh(); timer.callback()")
     eq(eval("labels[1].hideCalls"), nil)
+    eq(eval("labels[1].anchor == originalAnchor"), true)
     eq(eval("labels[1].shown"), true)
     eq(eval("#labels"), 1)
 end)

@@ -1,5 +1,6 @@
 local _, Addon = ...
-local window, syncing
+local window, syncing, category
+local title = "FriendlyNameplateGuild"
 
 local function text(parent, value, x, y, font)
     local label = parent:CreateFontString(nil, "OVERLAY", font or "GameFontNormal")
@@ -31,14 +32,17 @@ function Addon.UpdateSettings()
     syncing = true
     local db = FriendlyNameplateGuildDB
     window.enabled:SetChecked(db.enabled)
+    window.showInInstances:SetChecked(db.showInInstances)
     window.hideEnemyLevels:SetChecked(db.hideEnemyLevels)
     local nameOnly = Addon.NameOnly()
     window.nameOnly:SetChecked(nameOnly == true)
     window.nameOnly:SetEnabled(nameOnly ~= nil)
     window.size:SetValue(db.fontSize)
     window.gap:SetValue(db.gap)
+    window.retry:SetValue(db.retryMs)
     window.sizeText:SetText("Font size: " .. db.fontSize)
     window.gapText:SetText("Space below name: " .. db.gap)
+    window.retryText:SetText("Guild label retry interval: " .. db.retryMs .. " ms")
     window.color:SetText("|cff" .. db.color .. "Choose guild color|r")
     window.preview:SetFontHeight(db.fontSize)
     window.preview:SetTextColor(rgb(db.color))
@@ -69,57 +73,86 @@ local function chooseColor()
     })
 end
 
-function Addon.ShowSettings()
-    -- Build the entire UI only when requested; use Blizzard widgets, no libraries.
+local function buildSettings(embedded)
     if not window then
-        window = CreateFrame("Frame", "FriendlyNameplateGuildSettings", UIParent, "BasicFrameTemplateWithInset")
+        local template
+        if not embedded then template = "BasicFrameTemplateWithInset" end
+        window = CreateFrame("Frame", "FriendlyNameplateGuildSettings", UIParent, template)
         Addon.SettingsWindow = window
-        window:SetSize(410, 508)
-        window:SetPoint("CENTER")
-        window:SetFrameStrata("DIALOG")
-        window.TitleText:SetText("FriendlyNameplateGuild")
-        if UISpecialFrames then table.insert(UISpecialFrames, "FriendlyNameplateGuildSettings") end
+        window:Hide()
+        if not embedded then
+            window:SetSize(410, 530)
+            window:SetPoint("CENTER")
+            window:SetFrameStrata("DIALOG")
+            window.TitleText:SetText(title)
+            if UISpecialFrames then table.insert(UISpecialFrames, "FriendlyNameplateGuildSettings") end
+        end
+        window:SetScript("OnShow", Addon.UpdateSettings)
         window.enabled = CreateFrame("CheckButton", nil, window, "UICheckButtonTemplate")
         window.enabled:SetPoint("TOPLEFT", 16, -35)
         text(window, "Show guild names", 52, -44)
         window.enabled:SetScript("OnClick", function(self) Addon.SetSetting("enabled", self:GetChecked()) end)
+        window.showInInstances = CreateFrame("CheckButton", nil, window, "UICheckButtonTemplate")
+        window.showInInstances:SetPoint("TOPLEFT", 16, -68)
+        text(window, "Show guild names in instances", 52, -77)
+        window.showInInstances:SetScript("OnClick", function(self)
+            Addon.SetSetting("showInInstances", self:GetChecked())
+        end)
         window.nameOnly = CreateFrame("CheckButton", nil, window, "UICheckButtonTemplate")
-        window.nameOnly:SetPoint("TOPLEFT", 16, -68)
-        text(window, "Show names only (hide friendly health bars)", 52, -77)
+        window.nameOnly:SetPoint("TOPLEFT", 16, -101)
+        text(window, "Show names only (hide friendly health bars)", 52, -110)
         window.nameOnly:SetScript("OnClick", function(self)
             Addon.SetNameOnly(self:GetChecked())
             Addon.UpdateSettings()
         end)
         window.hideEnemyLevels = CreateFrame("CheckButton", nil, window, "UICheckButtonTemplate")
-        window.hideEnemyLevels:SetPoint("TOPLEFT", 16, -101)
-        text(window, "Hide enemy level badges", 52, -110)
+        window.hideEnemyLevels:SetPoint("TOPLEFT", 16, -134)
+        text(window, "Hide enemy level badges", 52, -143)
         window.hideEnemyLevels:SetScript("OnClick", function(self) Addon.SetSetting("hideEnemyLevels", self:GetChecked()) end)
-        window.size, window.sizeText = slider(window, "fontSize", "Font size", -154, 8, 24)
-        window.gap, window.gapText = slider(window, "gap", "Space below name", -219, 0, 20)
+        window.size, window.sizeText = slider(window, "fontSize", "Font size", -178, 8, 24)
+        window.gap, window.gapText = slider(window, "gap", "Space below name", -233, 0, 20)
+        window.retry, window.retryText = slider(window, "retryMs", "Guild label retry interval",
+            -288, Addon.retryRange.min, Addon.retryRange.max)
         window.color = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
         window.color:SetSize(190, 26)
-        window.color:SetPoint("TOPLEFT", 20, -283)
+        window.color:SetPoint("TOPLEFT", 20, -344)
         window.color:SetScript("OnClick", chooseColor)
-        text(window, "Preview", 22, -328)
-        window.sample = text(window, "Friendly Player", 150, -348, "GameFontHighlight")
+        text(window, "Preview", 22, -385)
+        window.sample = text(window, "Friendly Player", 150, -399, "GameFontHighlight")
         window.preview = window:CreateFontString(nil, "OVERLAY")
         window.preview:SetFontObject(SystemFont_NamePlate_Outlined or SystemFont_NamePlate)
         window.preview:SetShadowColor(0, 0, 0, 1)
         window.preview:SetShadowOffset(1, -1)
         window.preview:SetText("<Your Guild>")
-        window.status = text(window, "", 22, -404, "GameFontHighlightSmall")
+        window.status = text(window, "", 22, -455, "GameFontHighlightSmall")
         window.status:SetWidth(365)
-        window.status:SetHeight(44)
         window.status:SetJustifyH("LEFT")
-        local note = text(window, "Guild labels require friendly player nameplates.\nGuild labels pause in instances; restricted plates are skipped.", 22, -456, "GameFontDisableSmall")
+        local note = text(window, "Guild labels require accessible friendly player nameplates.", 22, -490, "GameFontDisableSmall")
         note:SetWidth(365)
         note:SetJustifyH("LEFT")
         window.reset = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
         window.reset:SetSize(100, 24)
-        window.reset:SetPoint("TOPRIGHT", -20, -283)
+        window.reset:SetPoint("TOPLEFT", 290, -344)
         window.reset:SetText("Reset")
         window.reset:SetScript("OnClick", Addon.Reset)
     end
-    Addon.UpdateSettings()
-    window:Show()
+end
+
+function Addon.RegisterSettings()
+    if window or not Settings or not Settings.RegisterCanvasLayoutCategory
+        or not Settings.RegisterAddOnCategory or not Settings.OpenToCategory then return end
+    buildSettings(true)
+    category = Settings.RegisterCanvasLayoutCategory(window, title)
+    Settings.RegisterAddOnCategory(category)
+end
+
+function Addon.ShowSettings()
+    Addon.RegisterSettings()
+    if category then
+        Settings.OpenToCategory(category:GetID())
+    else
+        buildSettings(false)
+        Addon.UpdateSettings()
+        window:Show()
+    end
 end

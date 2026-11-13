@@ -110,7 +110,10 @@ local function Widget()
         self.value = value
         if self.scripts.OnValueChanged then self.scripts.OnValueChanged(self, value) end
     end
-    function widget:Show() self.shown = true end
+    function widget:Show()
+        self.shown = true
+        if self.scripts.OnShow then self.scripts.OnShow(self) end
+    end
     function widget:Hide() self.shown = false end
     function widget:CreateFontString() return Widget() end
     return widget
