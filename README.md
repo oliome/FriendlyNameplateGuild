@@ -12,7 +12,6 @@ A lightweight **World of Warcraft: Forever** addon that displays guild names ben
 - Choose the guild text's color, font size, and spacing.
 - Preview your changes in the settings window.
 - Enable WoW's name-only mode directly from the settings window to hide friendly health bars.
-- Optionally hide enemy level badges, including their skull icon, without hiding enemy health bars.
 - Toggle guild labels on or off and reset settings to defaults.
 - Saves your preferences between sessions.
 - Shows a chat warning after login if the game requires a newer addon Interface version.
@@ -35,8 +34,6 @@ Open **Options → AddOns → FriendlyNameplateGuild**, or type **`/fng`** or **
 **Guild label retry interval** controls how often the addon checks visible nameplates for guild data. It defaults to 200 ms and can be set from 100 to 1,000 ms.
 
 **Show names only** controls WoW's own friendly-player nameplate setting. The addon reads your existing choice and changes it only when you click the checkbox, outside combat. Turning guild labels off or resetting their appearance does not reset this game setting.
-
-**Hide enemy level badges** is a separate saved option, off by default. It applies to attackable units, including neutral enemies, on accessible Blizzard nameplates. Unchecking it or using Reset restores the original badge opacity. Restricted or replaced nameplates may not support it.
 
 Use `/fng status` to check whether guild labels are active.
 

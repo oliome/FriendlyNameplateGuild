@@ -2,13 +2,11 @@ local addonName, Addon = ...
 local initialized = false
 local widgets = setmetatable({}, {__mode = "k"})
 local defaults = {enabled = true, showInInstances = false, retryMs = 200,
-    hideEnemyLevels = false, fontSize = 11, gap = 2, color = "66ff99"}
+    fontSize = 11, gap = 2, color = "66ff99"}
 Addon.retryRange = {min = 100, max = 1000}
 local state = "waiting for login"
 local displayed = 0
 local ticker, tickerInterval
-local hiddenLevels = setmetatable({}, {__mode = "k"})
-local levelHooked = false
 local warnedOutdated = false
 
 local function polling(wanted, refresh)
@@ -64,52 +62,6 @@ local function safeFrame(frame)
     if type(frame.IsForbidden) ~= "function" then return false end
     local forbidden = frame:IsForbidden()
     return accessible(forbidden) and not forbidden
-end
-
-local function restoreLevel(level)
-    local original = hiddenLevels[level]
-    if original ~= nil and safeFrame(level) then
-        level:SetAlpha(original)
-        hiddenLevels[level] = nil
-    end
-end
-
-local function updateEnemyLevel(frame)
-    if not safeFrame(frame) or type(frame.GetNamePlateFrame) ~= "function" then return end
-    local level = frame.PlayerLevelDiffFrame
-    if not safeFrame(level) or type(level.GetAlpha) ~= "function" or type(level.SetAlpha) ~= "function" then return end
-    -- Restore first: Blizzard reuses these frames for friendly and enemy units.
-    restoreLevel(level)
-    if not FriendlyNameplateGuildDB.hideEnemyLevels then return end
-    local plate = frame:GetNamePlateFrame()
-    if not safeFrame(plate) or type(plate.GetUnit) ~= "function" then return end
-    local unit = plate:GetUnit()
-    if not accessible(unit) or type(unit) ~= "string" or type(UnitCanAttack) ~= "function" then return end
-    local enemy = UnitCanAttack("player", unit)
-    if not accessible(enemy) or not enemy then return end
-    local alpha = level:GetAlpha()
-    if not accessible(alpha) or type(alpha) ~= "number" then return end
-    hiddenLevels[level] = alpha
-    level:SetAlpha(0)
-end
-
-function Addon.UpdateEnemyLevels()
-    if not initialized then return end
-    for level in pairs(hiddenLevels) do pcall(restoreLevel, level) end
-    if not FriendlyNameplateGuildDB.hideEnemyLevels then return end
-    if not levelHooked and type(hooksecurefunc) == "function" and type(CompactUnitFrame_UpdatePlayerLevelDiff) == "function" then
-        hooksecurefunc("CompactUnitFrame_UpdatePlayerLevelDiff", function(frame)
-            if FriendlyNameplateGuildDB.hideEnemyLevels then pcall(updateEnemyLevel, frame) end
-        end)
-        levelHooked = true
-    end
-    if not C_NamePlate or type(C_NamePlate.GetNamePlates) ~= "function" then return end
-    local ok, plates = pcall(C_NamePlate.GetNamePlates)
-    if not ok or not accessible(plates) or type(plates) ~= "table"
-        or (type(issecrettable) == "function" and issecrettable(plates)) then return end
-    for _, plate in ipairs(plates) do
-        pcall(function() if safeFrame(plate) then updateEnemyLevel(plate.UnitFrame) end end)
-    end
 end
 
 local function draw(plate, seen)
@@ -228,7 +180,6 @@ end
 
 function Addon.Refresh()
     if not initialized then return end
-    Addon.UpdateEnemyLevels()
     refreshGuildLabels()
 end
 
@@ -255,7 +206,7 @@ end
 
 function Addon.SetSetting(key, value)
     if not initialized then return false end
-    if not (((key == "enabled" or key == "showInInstances" or key == "hideEnemyLevels") and type(value) == "boolean")
+    if not (((key == "enabled" or key == "showInInstances") and type(value) == "boolean")
         or (key == "fontSize" and numberInRange(value, 8, 24))
         or (key == "gap" and numberInRange(value, 0, 20))
         or (key == "retryMs" and validRetry(value))
@@ -305,7 +256,6 @@ function Addon.Initialize()
     if type(db.enabled) ~= "boolean" then db.enabled = defaults.enabled end
     if type(db.showInInstances) ~= "boolean" then db.showInInstances = defaults.showInInstances end
     if not validRetry(db.retryMs) then db.retryMs = defaults.retryMs end
-    if type(db.hideEnemyLevels) ~= "boolean" then db.hideEnemyLevels = defaults.hideEnemyLevels end
     if not numberInRange(db.fontSize, 8, 24) then db.fontSize = defaults.fontSize end
     if not numberInRange(db.gap, 0, 20) then db.gap = defaults.gap end
     if not validColor(db.color) then db.color = defaults.color end
